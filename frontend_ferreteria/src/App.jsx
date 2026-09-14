@@ -3,7 +3,7 @@ import Header from './components/Header'
 import SeccionInicio from './components/SeccionInicio'
 import Footer from './components/Footer'
 import AdminPanel from './components/AdminPanel'
-import { ModalAuth, ModalFactura, ModalAdmin, ModalDetallePedido } from './components/Modales'
+import { ModalAuth, ModalFactura, ModalMetodoPago, ModalDatosBanco, ModalRecibo, ModalAdmin, ModalDetallePedido, ModalMiCuenta, ModalMisCompras } from './components/Modales'
 
 function App() {
   const [productos, setProductos] = useState([])
@@ -13,8 +13,8 @@ function App() {
   const [busqueda, setBusqueda] = useState('')
   const [categoriaActiva, setCategoriaActiva] = useState('Todas las categorías')
   const [ofertaActiva, setOfertaActiva] = useState(null)
+  const [viendoFavoritos, setViendoFavoritos] = useState(false)
   
-  // Estados de Autenticación y Modales
   const [modalAuthAbierto, setModalAuthAbierto] = useState(false)
   const [modoRegistro, setModoRegistro] = useState(false)
   const [usuarioLogueado, setUsuarioLogueado] = useState(null)
@@ -23,15 +23,22 @@ function App() {
   const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false)
   const [datosFactura, setDatosFactura] = useState({ direccion: '', cedula: '', whatsapp: '' })
 
+  // ESTADOS PARA LOS PAGOS Y EL RECIBO
+  const [modalPagoAbierto, setModalPagoAbierto] = useState(false)
+  const [modalBancoAbierto, setModalBancoAbierto] = useState(false)
+  const [modalReciboAbierto, setModalReciboAbierto] = useState(false)
+  const [datosRecibo, setDatosRecibo] = useState(null)
+
   const [modalAdminAbierto, setModalAdminAbierto] = useState(false)
+  const [modalCuentaAbierto, setModalCuentaAbierto] = useState(false)
+  const [modalComprasAbierto, setModalComprasAbierto] = useState(false)
   const [claveAdmin, setClaveAdmin] = useState('')
   const PASSWORD_SECRETA = "admin123"
   
   const [pedidosAdmin, setPedidosAdmin] = useState([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
 
-  // ¡AQUÍ ESTÁ EL NUEVO CAMPO imagen_url AÑADIDO!
-  const estadoInicial = { sku: '', nombre: '', id_categoria: 1, costo_interno: '', precio_venta: '', stock: '', descripcion_corta: '', imagen_url: '' }
+  const estadoInicial = { sku: '', nombre: '', id_categoria: 1, costo_interno: '', precio_venta: '', stock: '', descripcion_corta: '', imagen_url: '', oferta_tipo: '' }
   const [nuevoProducto, setNuevoProducto] = useState(estadoInicial)
 
   const departamentos = [
@@ -43,7 +50,10 @@ function App() {
     { nombre: 'Pintura', id: 6, icono: '🎨', bg: '#fce4ec' },
     { nombre: 'Carpintería', id: 7, icono: '🪚', bg: '#efebe9' },
     { nombre: 'Fluidos', id: 8, icono: '💧', bg: '#e1f5fe' },
-    { nombre: 'Automotriz', id: 9, icono: '🚗', bg: '#fffde7' }
+    { nombre: 'Automotriz', id: 9, icono: '🚗', bg: '#fffde7' },
+    { nombre: 'Insumos Químicos', id: 10, icono: '🧪', bg: '#f0f4c3' },
+    { nombre: 'Cocina', id: 11, icono: '🍳', bg: '#ffe0b2' },
+    { nombre: 'Jardín', id: 12, icono: '🌿', bg: '#dcedc8' }
   ]
 
   const cargarProductos = () => {
@@ -53,13 +63,50 @@ function App() {
     fetch('http://127.0.0.1:8000/pedidos').then(r => r.json()).then(d => { if(d.estado === "Éxito") setPedidosAdmin(d.pedidos) })
   }
 
-  useEffect(() => { cargarProductos() }, [])
+  useEffect(() => { 
+    cargarProductos();
+    window.history.replaceState({ tipo: 'inicio' }, '', '');
+
+    const manejarHistorial = (evento) => {
+      const estado = evento.state;
+      if (estado) {
+        if (estado.tipo === 'categoria') {
+          setCategoriaActiva(estado.nombre); setOfertaActiva(null); setBusqueda(''); setViendoFavoritos(false); setVistaAdmin(false);
+        } else if (estado.tipo === 'oferta') {
+          setOfertaActiva(estado.nombre); setCategoriaActiva('Todas las categorías'); setBusqueda(''); setViendoFavoritos(false); setVistaAdmin(false);
+        } else if (estado.tipo === 'favoritos') {
+          setViendoFavoritos(true); setOfertaActiva(null); setCategoriaActiva('Todas las categorías'); setBusqueda(''); setVistaAdmin(false);
+        } else if (estado.tipo === 'admin') {
+          setVistaAdmin(true);
+        } else {
+          setVistaAdmin(false); setViendoFavoritos(false); setCategoriaActiva('Todas las categorías'); setOfertaActiva(null); setBusqueda('');
+        }
+      } else {
+        setVistaAdmin(false); setViendoFavoritos(false); setCategoriaActiva('Todas las categorías'); setOfertaActiva(null); setBusqueda('');
+      }
+    };
+
+    window.addEventListener('popstate', manejarHistorial);
+    return () => window.removeEventListener('popstate', manejarHistorial);
+  }, [])
 
   const manejarCambioAuth = (e) => setFormAuth({ ...formAuth, [e.target.name]: e.target.value })
   const manejarCambioFactura = (e) => setDatosFactura({ ...datosFactura, [e.target.name]: e.target.value })
 
   const gestionarLoginRegistro = (e) => {
     e.preventDefault()
+    
+    // Acceso para administrador si usa correo y clave maestra
+    if (!modoRegistro && formAuth.correo === "admin@ferreteria.com" && formAuth.contrasena === "admin123") {
+      setModalAuthAbierto(false);
+      setVistaAdmin(true);
+      setFormAuth({ nombre_completo: '', correo: '', contrasena: '', direccion: '', cedula: '', whatsapp: '' });
+      cargarPedidosAdmin();
+      window.history.pushState({ tipo: 'admin' }, '', '');
+      alert("¡Bienvenido al Panel de Administración!");
+      return;
+    }
+
     const url = modoRegistro ? 'http://127.0.0.1:8000/registro' : 'http://127.0.0.1:8000/login'
     fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formAuth) })
     .then(r => r.json()).then(datos => {
@@ -75,27 +122,73 @@ function App() {
 
   const iniciarProcesoCompra = () => {
     if (!usuarioLogueado) { alert("Debes iniciar sesión para poder comprar."); setModalAuthAbierto(true); return; }
-    if (!usuarioLogueado.direccion || !usuarioLogueado.cedula || !usuarioLogueado.whatsapp) setModalFacturaAbierto(true)
-    else ejecutarCompraFinal(usuarioLogueado.direccion, usuarioLogueado.cedula, usuarioLogueado.whatsapp)
+    if (!usuarioLogueado.direccion || !usuarioLogueado.cedula || !usuarioLogueado.whatsapp) {
+      setModalFacturaAbierto(true);
+    } else {
+      setModalPagoAbierto(true); 
+    }
   }
 
   const enviarDatosFacturaExtra = (e) => {
     e.preventDefault()
     const usuarioActualizado = { ...usuarioLogueado, ...datosFactura }
     setUsuarioLogueado(usuarioActualizado)
-    ejecutarCompraFinal(datosFactura.direccion, datosFactura.cedula, datosFactura.whatsapp)
+    setModalFacturaAbierto(false);
+    setModalPagoAbierto(true); 
   }
 
-  const ejecutarCompraFinal = (dir, ced, wapp) => {
-    const datosPedido = {
-      nombre_cliente: usuarioLogueado.nombre_completo, correo_cliente: usuarioLogueado.correo, total_pagado: totalCarrito,
-      cedula: ced, whatsapp: wapp, direccion: dir, carrito: carrito.map(item => ({ sku: item.sku, cantidad: item.cantidad }))
+  const seleccionarMetodoPago = (metodo) => {
+    setModalPagoAbierto(false);
+    if (metodo === 'Transferencia') {
+      setModalBancoAbierto(true);
+    } else {
+      ejecutarCompraFinal('Efectivo contra entrega', null);
     }
-    fetch('http://127.0.0.1:8000/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datosPedido) })
+  }
+
+  const confirmarTransferencia = (archivoObj) => {
+    setModalBancoAbierto(false);
+    ejecutarCompraFinal('Transferencia Bancaria', archivoObj);
+  }
+
+  const ejecutarCompraFinal = (metodoPagoNombre, archivoVoucherObj = null) => {
+    const dir = usuarioLogueado.direccion;
+    const ced = usuarioLogueado.cedula;
+    const wapp = usuarioLogueado.whatsapp;
+
+    const formData = new FormData();
+    formData.append("nombre_cliente", usuarioLogueado.nombre_completo);
+    formData.append("correo_cliente", usuarioLogueado.correo);
+    formData.append("total_pagado", totalCarrito);
+    formData.append("cedula", ced);
+    formData.append("whatsapp", wapp);
+    formData.append("direccion", dir);
+    formData.append("metodo_pago", metodoPagoNombre);
+    formData.append("carrito", JSON.stringify(carrito.map(item => ({ sku: item.sku, cantidad: item.cantidad, nombre: item.nombre, precio_venta: item.precio_venta }))));
+    
+    if (archivoVoucherObj) {
+      formData.append("voucher_file", archivoVoucherObj);
+    }
+
+    fetch('http://127.0.0.1:8000/pedidos', { 
+      method: 'POST', 
+      body: formData 
+    })
     .then(r => r.json()).then(datos => {
       if(datos.estado === "Éxito") {
-        alert(`¡Gracias por tu compra!\nTotal Pagado: $${totalCarrito.toFixed(2)}`);
-        setCarrito([]); setModalFacturaAbierto(false); cargarProductos();
+        setDatosRecibo({
+          nombre_cliente: usuarioLogueado.nombre_completo,
+          cedula: ced,
+          whatsapp: wapp,
+          direccion: dir,
+          metodo_pago: metodoPagoNombre,
+          voucher: archivoVoucherObj ? archivoVoucherObj.name : "",
+          total_pagado: totalCarrito,
+          carrito: [...carrito]
+        });
+        setCarrito([]); 
+        cargarProductos();
+        setModalReciboAbierto(true); 
       } else alert("Error al procesar el pedido.")
     })
   }
@@ -104,7 +197,67 @@ function App() {
     e.preventDefault()
     if (claveAdmin === PASSWORD_SECRETA) {
       setVistaAdmin(true); setModalAdminAbierto(false); setClaveAdmin(''); cargarPedidosAdmin();
+      window.history.pushState({ tipo: 'admin' }, '', '');
     } else { alert("Contraseña incorrecta."); setClaveAdmin(''); }
+  }
+
+  const seleccionarCategoria = (nombreCategoria) => { 
+    setCategoriaActiva(nombreCategoria); setOfertaActiva(null); setViendoFavoritos(false); setBusqueda(''); 
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+    window.history.pushState({ tipo: 'categoria', nombre: nombreCategoria }, '', '');
+  }
+
+  const seleccionarOferta = (nombreOferta) => { 
+    setOfertaActiva(nombreOferta); setCategoriaActiva('Todas las categorías'); setViendoFavoritos(false); setBusqueda(''); 
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+    window.history.pushState({ tipo: 'oferta', nombre: nombreOferta }, '', '');
+  }
+
+  const seleccionarFavoritos = () => {
+    setViendoFavoritos(true); setOfertaActiva(null); setCategoriaActiva('Todas las categorías'); setBusqueda('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.history.pushState({ tipo: 'favoritos' }, '', '');
+  }
+
+  const irAInicio = () => { 
+    setVistaAdmin(false); setCategoriaActiva('Todas las categorías'); setOfertaActiva(null); setViendoFavoritos(false); setBusqueda(''); 
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+    window.history.pushState({ tipo: 'inicio' }, '', '');
+  }
+
+  const darLike = (sku) => {
+    if (!usuarioLogueado) {
+      alert("Debes iniciar sesión para dar Me Gusta a los productos.");
+      setModalAuthAbierto(true);
+      return;
+    }
+
+    setProductos(prevProductos => 
+      prevProductos.map(p => {
+        if (p.sku === sku) {
+          const nuevoLikes = (p.likes || 0) + 1;
+          return { ...p, likes: nuevoLikes };
+        }
+        return p;
+      })
+    );
+
+    fetch(`http://127.0.0.1:8000/productos/${sku}/like`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: usuarioLogueado.id })
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.estado === "Éxito") {
+        setProductos(prevProductos => 
+          prevProductos.map(p => p.sku === sku ? { ...p, likes: d.likes } : p)
+        );
+      } else {
+        alert(d.detalle || "Error al procesar el voto.");
+        cargarProductos();
+      }
+    });
   }
 
   const manejarCambio = (e) => setNuevoProducto({ ...nuevoProducto, [e.target.name]: e.target.name === 'id_categoria' ? parseInt(e.target.value) : e.target.value })
@@ -134,12 +287,7 @@ function App() {
   const eliminarDelCarrito = (sku) => setCarrito(carrito.filter(item => item.sku !== sku))
   const totalCarrito = carrito.reduce((t, item) => t + (item.precio_venta * item.cantidad), 0)
 
-  // NAVEGACIÓN Y FILTROS
-  const seleccionarCategoria = (nombreCategoria) => { setCategoriaActiva(nombreCategoria); setOfertaActiva(null); setBusqueda(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  const seleccionarOferta = (nombreOferta) => { setOfertaActiva(nombreOferta); setCategoriaActiva('Todas las categorías'); setBusqueda(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  const irAInicio = () => { setVistaAdmin(false); setCategoriaActiva('Todas las categorías'); setOfertaActiva(null); setBusqueda(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-
-  const mostrarInicio = busqueda === '' && categoriaActiva === 'Todas las categorías' && !ofertaActiva
+  const mostrarInicio = busqueda === '' && categoriaActiva === 'Todas las categorías' && !ofertaActiva && !viendoFavoritos
 
   let productosFiltrados = productos.filter(p => {
     const coincideBusqueda = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.sku.toLowerCase().includes(busqueda.toLowerCase())
@@ -147,62 +295,85 @@ function App() {
     return coincideBusqueda && coincideCategoria
   })
 
-  if (ofertaActiva) {
-    if (ofertaActiva === 'Oferta Especial') productosFiltrados = productosFiltrados.filter(p => p.stock > 20) 
-    else if (ofertaActiva === 'Descuento Masivo') productosFiltrados = productosFiltrados.filter(p => p.precio_venta < 15)
-    else if (ofertaActiva === 'Temporada') productosFiltrados = productosFiltrados.filter(p => p.id_categoria === 2 || p.id_categoria === 6)
-    else if (ofertaActiva === 'Todas las ofertas') productosFiltrados = productosFiltrados.filter(p => p.precio_venta < 15 || p.stock > 20)
-  } else if (mostrarInicio) productosFiltrados = productosFiltrados.filter(p => (p.ventas || 0) >= 20)
+  if (viendoFavoritos) {
+    productosFiltrados = productos.filter(p => (p.likes || 0) >= 20).sort((a, b) => b.likes - a.likes);
+  } else if (ofertaActiva) {
+    if (ofertaActiva === 'Todas las ofertas') {
+      productosFiltrados = productosFiltrados.filter(p => p.oferta_tipo && p.oferta_tipo !== '');
+    } else {
+      productosFiltrados = productosFiltrados.filter(p => p.oferta_tipo === ofertaActiva);
+    }
+  } else if (mostrarInicio) {
+    productosFiltrados = productosFiltrados.filter(p => (p.ventas || 0) >= 20)
+  }
 
-  productosFiltrados = productosFiltrados.sort((a, b) => (b.ventas || 0) - (a.ventas || 0))
+  if (!viendoFavoritos) {
+    productosFiltrados = productosFiltrados.sort((a, b) => (b.ventas || 0) - (a.ventas || 0))
+  }
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', backgroundColor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       
-      {/* --- MODALES EXTRÍDOS --- */}
       <ModalAuth modalAuthAbierto={modalAuthAbierto} setModalAuthAbierto={setModalAuthAbierto} modoRegistro={modoRegistro} setModoRegistro={setModoRegistro} formAuth={formAuth} manejarCambioAuth={manejarCambioAuth} gestionarLoginRegistro={gestionarLoginRegistro} />
       <ModalFactura modalFacturaAbierto={modalFacturaAbierto} setModalFacturaAbierto={setModalFacturaAbierto} datosFactura={datosFactura} manejarCambioFactura={manejarCambioFactura} enviarDatosFacturaExtra={enviarDatosFacturaExtra} />
+      
+      {/* MODALES DE PAGO Y RECIBO */}
+      <ModalMetodoPago modalPagoAbierto={modalPagoAbierto} setModalPagoAbierto={setModalPagoAbierto} seleccionarMetodoPago={seleccionarMetodoPago} totalPagar={totalCarrito} />
+      <ModalDatosBanco modalBancoAbierto={modalBancoAbierto} setModalBancoAbierto={setModalBancoAbierto} confirmarTransferencia={confirmarTransferencia} totalPagar={totalCarrito} />
+      <ModalRecibo modalReciboAbierto={modalReciboAbierto} setModalReciboAbierto={setModalReciboAbierto} datosRecibo={datosRecibo} />
+
       <ModalAdmin modalAdminAbierto={modalAdminAbierto} setModalAdminAbierto={setModalAdminAbierto} claveAdmin={claveAdmin} setClaveAdmin={setClaveAdmin} verificarAdmin={verificarAdmin} />
       <ModalDetallePedido clienteSeleccionado={clienteSeleccionado} setClienteSeleccionado={setClienteSeleccionado} />
+      <ModalMiCuenta modalCuentaAbierto={modalCuentaAbierto} setModalCuentaAbierto={setModalCuentaAbierto} usuarioLogueado={usuarioLogueado} setUsuarioLogueado={setUsuarioLogueado} />
+      <ModalMisCompras modalComprasAbierto={modalComprasAbierto} setModalComprasAbierto={setModalComprasAbierto} usuarioLogueado={usuarioLogueado} />
 
-      {/* --- RENDERIZADO PRINCIPAL --- */}
       {vistaAdmin ? (
         <AdminPanel irAInicio={irAInicio} pedidosAdmin={pedidosAdmin} setClienteSeleccionado={setClienteSeleccionado} editando={editando} setEditando={setEditando} nuevoProducto={nuevoProducto} estadoInicial={estadoInicial} setNuevoProducto={setNuevoProducto} manejarCambio={manejarCambio} guardarProducto={guardarProducto} productos={productos} prepararEdicion={prepararEdicion} eliminarProducto={eliminarProducto} departamentos={departamentos} />
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           
-          <Header irAInicio={irAInicio} busqueda={busqueda} setBusqueda={setBusqueda} setCategoriaActiva={setCategoriaActiva} setOfertaActiva={setOfertaActiva} usuarioLogueado={usuarioLogueado} cerrarSesion={cerrarSesion} setModalAuthAbierto={setModalAuthAbierto} setModalAdminAbierto={setModalAdminAbierto} carrito={carrito} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} departamentos={departamentos} />
+          <Header irAInicio={irAInicio} busqueda={busqueda} setBusqueda={setBusqueda} setCategoriaActiva={setCategoriaActiva} setOfertaActiva={setOfertaActiva} usuarioLogueado={usuarioLogueado} cerrarSesion={cerrarSesion} setModalAuthAbierto={setModalAuthAbierto} setModalAdminAbierto={setModalAdminAbierto} setModalCuentaAbierto={setModalCuentaAbierto} setModalComprasAbierto={setModalComprasAbierto} carrito={carrito} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} seleccionarFavoritos={seleccionarFavoritos} departamentos={departamentos} />
 
-          {mostrarInicio && <SeccionInicio departamentos={departamentos} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} />}
+          {/* Doble clic en el banner para abrir el modal secreto de admin */}
+          {mostrarInicio && <div onDoubleClick={() => setModalAdminAbierto(true)}><SeccionInicio departamentos={departamentos} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} /></div>}
 
           <div style={{ padding: '30px 5%', flex: 1 }}>
             
-            {!mostrarInicio && (
+            {(!mostrarInicio || viendoFavoritos) && (
               <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>Inicio &gt; {busqueda ? `Resultados para: '${busqueda}'` : (ofertaActiva ? `Ofertas > ${ofertaActiva}` : `Departamento: ${categoriaActiva}`)}</div>
-                <h2 style={{ fontSize: '38px', color: '#333', fontWeight: 'bold', margin: '0 0 30px 0' }}>{busqueda ? `Resultados para: '${busqueda.toUpperCase()}'` : (ofertaActiva ? `Promociones: ${ofertaActiva}` : categoriaActiva)}</h2>
+                <div style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
+                  Inicio &gt; {viendoFavoritos ? 'Los favoritos (Más de 20 likes)' : (busqueda ? `Resultados para: '${busqueda}'` : (ofertaActiva ? `Ofertas > ${ofertaActiva}` : `Departamento: ${categoriaActiva}`))}
+                </div>
+                <h2 style={{ fontSize: '38px', color: '#333', fontWeight: 'bold', margin: '0 0 30px 0' }}>
+                  {viendoFavoritos ? '❤️ Productos Favoritos del Público' : (busqueda ? `Resultados para: '${busqueda.toUpperCase()}'` : (ofertaActiva ? `Promociones: ${ofertaActiva}` : categoriaActiva))}
+                </h2>
               </div>
             )}
 
             <div style={{ display: 'flex', gap: '40px', alignItems: 'flex-start' }}>
               
-              {/* FILTROS LATERALES */}
-              {!mostrarInicio && (
+              {(!mostrarInicio || viendoFavoritos) && (
                 <div style={{ width: '220px', flexShrink: '0' }}>
                   <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '20px', margin: '0 0 5px 0', color: '#000' }}><span style={{fontSize: '24px'}}>⧼</span> Filtros</h3>
                   <div style={{ borderTop: '1px solid #ddd', paddingTop: '15px', marginTop: '20px' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', color: '#333' }}>Categoría <span>⌄</span></div>
                     <div style={{ color: '#555', fontSize: '14px', lineHeight: '2.5' }}>
-                      <div style={{cursor: 'pointer'}} onClick={() => seleccionarCategoria('Herramientas')}>Herramientas</div>
-                      <div style={{cursor: 'pointer'}} onClick={() => seleccionarCategoria('Construcción')}>Construcción</div>
+                      {departamentos.map(dep => (
+                        <div 
+                          key={dep.id} 
+                          style={{ cursor: 'pointer', fontWeight: categoriaActiva === dep.nombre && !viendoFavoritos ? 'bold' : 'normal', color: categoriaActiva === dep.nombre && !viendoFavoritos ? '#000' : '#555' }} 
+                          onClick={() => seleccionarCategoria(dep.nombre)}
+                        >
+                          {dep.nombre}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* GRILLA DE PRODUCTOS */}
               <div style={{ flex: '3' }}>
-                {!mostrarInicio ? (
+                {(!mostrarInicio || viendoFavoritos) ? (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', fontSize: '14px', color: '#555', alignItems: 'center' }}>
                     <span><strong>{productosFiltrados.length}</strong> Productos encontrados</span>
                   </div>
@@ -213,31 +384,45 @@ function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
                   {productosFiltrados.length > 0 ? (
                     productosFiltrados.map((producto) => (
-                      <div key={producto.sku} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', border: '1px solid #eaeaea' }}>
+                      <div key={producto.sku} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', border: '1px solid #eaeaea', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         
-                        {/* ¡AQUÍ SE MUESTRA LA IMAGEN REAL SI EXISTE! */}
-                        {producto.imagen_url ? (
-                          <div style={{ height: '180px', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '4px' }}>
-                            <img src={producto.imagen_url} alt={producto.nombre} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
-                          </div>
-                        ) : (
-                          <div style={{ height: '180px', backgroundColor: '#f9f9f9', borderRadius: '4px', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px' }}>🛠️</div>
-                        )}
-
-                        <h3 style={{ color: '#333', fontSize: '15px', margin: '0 0 10px 0', height: '40px', overflow: 'hidden', fontWeight: 'bold' }}>{producto.nombre}</h3>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '15px' }}>
-                          <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#000' }}>${producto.precio_venta.toFixed(2)}</span>
-                        </div>
-                        <button onClick={() => agregarAlCarrito(producto)} disabled={producto.stock === 0} style={{ width: '100%', padding: '12px', backgroundColor: producto.stock > 0 ? '#fcee21' : '#e0e0e0', color: '#000', border: '2px solid #000', borderRadius: '4px', fontWeight: 'bold', cursor: producto.stock > 0 ? 'pointer' : 'not-allowed' }}>
-                          {producto.stock > 0 ? 'Agregar al carrito' : 'Agotado'}
+                        <button 
+                          onClick={() => darLike(producto.sku)}
+                          title="Dar Me Gusta"
+                          style={{ position: 'absolute', top: '10px', right: '10px', background: '#fff', border: '1px solid #ddd', borderRadius: '50%', width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', zIndex: 2 }}
+                        >
+                          ❤️ <span style={{ fontSize: '10px', fontWeight: 'bold', marginLeft: '2px' }}>{producto.likes || 0}</span>
                         </button>
+
+                        <div>
+                          {producto.imagen_url ? (
+                            <div style={{ height: '180px', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '4px' }}>
+                              <img src={producto.imagen_url} alt={producto.nombre} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                            </div>
+                          ) : (
+                            <div style={{ height: '180px', backgroundColor: '#f9f9f9', borderRadius: '4px', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px' }}>🛠️</div>
+                          )}
+
+                          <h3 style={{ color: '#333', fontSize: '13px', margin: '0 0 10px 0', minHeight: '50px', maxHeight: '50px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', fontWeight: 'bold', lineHeight: '1.25' }} title={producto.nombre}>
+                            {producto.nombre}
+                          </h3>
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '15px' }}>
+                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#000' }}>${producto.precio_venta.toFixed(2)}</span>
+                          </div>
+                          <button onClick={() => agregarAlCarrito(producto)} disabled={producto.stock === 0} style={{ width: '100%', padding: '12px', backgroundColor: producto.stock > 0 ? '#fcee21' : '#e0e0e0', color: '#000', border: '2px solid #000', borderRadius: '4px', fontWeight: 'bold', cursor: producto.stock > 0 ? 'pointer' : 'not-allowed' }}>
+                            {producto.stock > 0 ? 'Agregar al carrito' : 'Agotado'}
+                          </button>
+                        </div>
+
                       </div>
                     ))
-                  ) : <p style={{ gridColumn: '1 / -1', color: '#666', fontSize: '18px' }}>No se encontraron artículos.</p>}
+                  ) : <p style={{ gridColumn: '1 / -1', color: '#666', fontSize: '18px' }}>{viendoFavoritos ? 'Aún no hay productos con 20 o más likes. ¡Empieza a darles amor a tus favoritos!' : 'No se encontraron artículos.'}</p>}
                 </div>
               </div>
 
-              {/* CARRITO FLOTANTE */}
               {carrito.length > 0 && (
                 <div style={{ flex: '1', minWidth: '280px', backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', position: 'sticky', top: '180px', border: '2px solid #000' }}>
                   <h3 style={{ marginTop: 0, borderBottom: '2px solid #fcee21', paddingBottom: '10px', color: '#000' }}>Resumen de compra</h3>
