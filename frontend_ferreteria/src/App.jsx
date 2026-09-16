@@ -7,8 +7,24 @@ import { ModalAuth, ModalFactura, ModalMetodoPago, ModalDatosBanco, ModalRecibo,
 
 function App() {
   const [productos, setProductos] = useState([])
-  const [vistaAdmin, setVistaAdmin] = useState(false) 
-  const [carrito, setCarrito] = useState([])
+  
+  // 1. CARGAMOS LA VISTA ADMIN DESDE LA MEMORIA DEL NAVEGADOR
+  const [vistaAdmin, setVistaAdmin] = useState(() => {
+    return localStorage.getItem('esAdminFerreteria') === 'true';
+  }) 
+
+  // 2. CARGAMOS EL CARRITO DESDE LA MEMORIA DEL NAVEGADOR
+  const [carrito, setCarrito] = useState(() => {
+    const carritoGuardado = localStorage.getItem('carritoFerreteria');
+    return carritoGuardado ? JSON.parse(carritoGuardado) : [];
+  })
+
+  // 3. CARGAMOS LA SESIÓN DEL CLIENTE DESDE LA MEMORIA
+  const [usuarioLogueado, setUsuarioLogueado] = useState(() => {
+    const usuarioGuardado = localStorage.getItem('usuarioFerreteria');
+    return usuarioGuardado ? JSON.parse(usuarioGuardado) : null;
+  })
+
   const [editando, setEditando] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [categoriaActiva, setCategoriaActiva] = useState('Todas las categorías')
@@ -17,13 +33,11 @@ function App() {
   
   const [modalAuthAbierto, setModalAuthAbierto] = useState(false)
   const [modoRegistro, setModoRegistro] = useState(false)
-  const [usuarioLogueado, setUsuarioLogueado] = useState(null)
   const [formAuth, setFormAuth] = useState({ nombre_completo: '', correo: '', contrasena: '', direccion: '', cedula: '', whatsapp: '' })
 
   const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false)
   const [datosFactura, setDatosFactura] = useState({ direccion: '', cedula: '', whatsapp: '' })
 
-  // ESTADOS PARA LOS PAGOS Y EL RECIBO
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false)
   const [modalBancoAbierto, setModalBancoAbierto] = useState(false)
   const [modalReciboAbierto, setModalReciboAbierto] = useState(false)
@@ -40,6 +54,9 @@ function App() {
 
   const estadoInicial = { sku: '', nombre: '', id_categoria: 1, costo_interno: '', precio_venta: '', stock: '', descripcion_corta: '', imagen_url: '', oferta_tipo: '' }
   const [nuevoProducto, setNuevoProducto] = useState(estadoInicial)
+
+  const [modalCarritoAbierto, setModalCarritoAbierto] = useState(false)
+  const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '' })
 
   const departamentos = [
     { nombre: 'Herramientas', id: 1, icono: '🛠️', bg: '#e3f2fd' },
@@ -63,9 +80,21 @@ function App() {
     fetch('http://127.0.0.1:8000/pedidos').then(r => r.json()).then(d => { if(d.estado === "Éxito") setPedidosAdmin(d.pedidos) })
   }
 
+  // EFECTO: GUARDA EL CARRITO AUTOMÁTICAMENTE CADA VEZ QUE CAMBIA
+  useEffect(() => {
+    localStorage.setItem('carritoFerreteria', JSON.stringify(carrito));
+  }, [carrito]);
+
   useEffect(() => { 
     cargarProductos();
-    window.history.replaceState({ tipo: 'inicio' }, '', '');
+    
+    // Si la memoria dice que somos admin, cargamos los pedidos al iniciar
+    if (localStorage.getItem('esAdminFerreteria') === 'true') {
+      cargarPedidosAdmin();
+      window.history.replaceState({ tipo: 'admin' }, '', '');
+    } else {
+      window.history.replaceState({ tipo: 'inicio' }, '', '');
+    }
 
     const manejarHistorial = (evento) => {
       const estado = evento.state;
@@ -96,10 +125,11 @@ function App() {
   const gestionarLoginRegistro = (e) => {
     e.preventDefault()
     
-    // Acceso para administrador si usa correo y clave maestra
+    // Acceso para administrador
     if (!modoRegistro && formAuth.correo === "admin@ferreteria.com" && formAuth.contrasena === "admin123") {
       setModalAuthAbierto(false);
       setVistaAdmin(true);
+      localStorage.setItem('esAdminFerreteria', 'true'); // GUARDAR EN MEMORIA
       setFormAuth({ nombre_completo: '', correo: '', contrasena: '', direccion: '', cedula: '', whatsapp: '' });
       cargarPedidosAdmin();
       window.history.pushState({ tipo: 'admin' }, '', '');
@@ -112,13 +142,25 @@ function App() {
     .then(r => r.json()).then(datos => {
       if (datos.estado === "Éxito") {
         if (modoRegistro) { alert("¡Registro exitoso! Ahora inicia sesión."); setModoRegistro(false); } 
-        else { setUsuarioLogueado(datos.usuario); setModalAuthAbierto(false); alert(`¡Bienvenido, ${datos.usuario.nombre_completo}!`); }
+        else { 
+          setUsuarioLogueado(datos.usuario); 
+          localStorage.setItem('usuarioFerreteria', JSON.stringify(datos.usuario)); // GUARDAR EN MEMORIA
+          setModalAuthAbierto(false); 
+          alert(`¡Bienvenido, ${datos.usuario.nombre_completo}!`); 
+        }
         setFormAuth({ nombre_completo: '', correo: '', contrasena: '', direccion: '', cedula: '', whatsapp: '' })
       } else alert(datos.detalle || "Error.")
     })
   }
 
-  const cerrarSesion = () => { setUsuarioLogueado(null); alert("Sesión cerrada."); }
+  const cerrarSesion = () => { 
+    setUsuarioLogueado(null); 
+    setVistaAdmin(false);
+    localStorage.removeItem('usuarioFerreteria'); // BORRAR DE MEMORIA
+    localStorage.removeItem('esAdminFerreteria'); // BORRAR DE MEMORIA
+    window.history.pushState({ tipo: 'inicio' }, '', '');
+    alert("Sesión cerrada."); 
+  }
 
   const iniciarProcesoCompra = () => {
     if (!usuarioLogueado) { alert("Debes iniciar sesión para poder comprar."); setModalAuthAbierto(true); return; }
@@ -133,6 +175,7 @@ function App() {
     e.preventDefault()
     const usuarioActualizado = { ...usuarioLogueado, ...datosFactura }
     setUsuarioLogueado(usuarioActualizado)
+    localStorage.setItem('usuarioFerreteria', JSON.stringify(usuarioActualizado)); // GUARDAR ACTUALIZACIÓN
     setModalFacturaAbierto(false);
     setModalPagoAbierto(true); 
   }
@@ -164,7 +207,7 @@ function App() {
     formData.append("whatsapp", wapp);
     formData.append("direccion", dir);
     formData.append("metodo_pago", metodoPagoNombre);
-    formData.append("carrito", JSON.stringify(carrito.map(item => ({ sku: item.sku, cantidad: item.cantidad, nombre: item.nombre, precio_venta: item.precio_venta }))));
+    formData.append("carrito", JSON.stringify(carrito.map(item => ({ sku: item.cantidad, nombre: item.nombre, precio_venta: item.precio_venta }))));
     
     if (archivoVoucherObj) {
       formData.append("voucher_file", archivoVoucherObj);
@@ -186,7 +229,7 @@ function App() {
           total_pagado: totalCarrito,
           carrito: [...carrito]
         });
-        setCarrito([]); 
+        setCarrito([]); // Se vacía solo después de comprar
         cargarProductos();
         setModalReciboAbierto(true); 
       } else alert("Error al procesar el pedido.")
@@ -196,9 +239,24 @@ function App() {
   const verificarAdmin = (e) => {
     e.preventDefault()
     if (claveAdmin === PASSWORD_SECRETA) {
-      setVistaAdmin(true); setModalAdminAbierto(false); setClaveAdmin(''); cargarPedidosAdmin();
+      setVistaAdmin(true); 
+      localStorage.setItem('esAdminFerreteria', 'true'); // GUARDAR EN MEMORIA
+      setModalAdminAbierto(false); 
+      setClaveAdmin(''); 
+      cargarPedidosAdmin();
       window.history.pushState({ tipo: 'admin' }, '', '');
     } else { alert("Contraseña incorrecta."); setClaveAdmin(''); }
+  }
+
+  const irAInicio = () => { 
+    setVistaAdmin(false); 
+    localStorage.removeItem('esAdminFerreteria'); // Si va a inicio, sale de admin
+    setCategoriaActiva('Todas las categorías'); 
+    setOfertaActiva(null); 
+    setViendoFavoritos(false); 
+    setBusqueda(''); 
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+    window.history.pushState({ tipo: 'inicio' }, '', '');
   }
 
   const seleccionarCategoria = (nombreCategoria) => { 
@@ -217,12 +275,6 @@ function App() {
     setViendoFavoritos(true); setOfertaActiva(null); setCategoriaActiva('Todas las categorías'); setBusqueda('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     window.history.pushState({ tipo: 'favoritos' }, '', '');
-  }
-
-  const irAInicio = () => { 
-    setVistaAdmin(false); setCategoriaActiva('Todas las categorías'); setOfertaActiva(null); setViendoFavoritos(false); setBusqueda(''); 
-    window.scrollTo({ top: 0, behavior: 'smooth' }); 
-    window.history.pushState({ tipo: 'inicio' }, '', '');
   }
 
   const darLike = (sku) => {
@@ -262,25 +314,86 @@ function App() {
 
   const manejarCambio = (e) => setNuevoProducto({ ...nuevoProducto, [e.target.name]: e.target.name === 'id_categoria' ? parseInt(e.target.value) : e.target.value })
   
+  // FUNCIÓN GUARDAR PRODUCTO OPTIMIZADA (SOPORTA COMAS Y PUNTOS DECIMALES)
   const guardarProducto = (e) => {
     e.preventDefault()
-    const p = { ...nuevoProducto, costo_interno: parseFloat(nuevoProducto.costo_interno), precio_venta: parseFloat(nuevoProducto.precio_venta), stock: parseInt(nuevoProducto.stock), id_categoria: parseInt(nuevoProducto.id_categoria) }
+    
+    const costoStr = String(nuevoProducto.costo_interno || "0").replace(',', '.');
+    const precioStr = String(nuevoProducto.precio_venta || "0").replace(',', '.');
+    
+    const costo = parseFloat(costoStr);
+    const precio = parseFloat(precioStr);
+    const stockVal = parseInt(nuevoProducto.stock);
+
+    if (isNaN(precio) || isNaN(stockVal)) {
+      alert("⚠️ Por favor ingresa un Precio de Venta y un Stock válidos.");
+      return;
+    }
+
+    const p = { 
+      ...nuevoProducto, 
+      costo_interno: isNaN(costo) ? 0 : costo, 
+      precio_venta: precio, 
+      stock: stockVal, 
+      id_categoria: parseInt(nuevoProducto.id_categoria),
+      oferta_tipo: nuevoProducto.oferta_tipo || "" 
+    }
+
     const url = editando ? `http://127.0.0.1:8000/productos/${nuevoProducto.sku}` : 'http://127.0.0.1:8000/productos'
-    fetch(url, { method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }).then(r => r.json()).then(d => {
-      if (d.estado === "Éxito") { cargarProductos(); setNuevoProducto(estadoInicial); setEditando(false); } else alert("Error: " + d.detalle)
+    
+    fetch(url, { 
+      method: editando ? 'PUT' : 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(p) 
     })
+    .then(r => r.json())
+    .then(d => {
+      if (d.estado === "Éxito") { 
+        alert(editando ? "✅ ¡Producto actualizado con éxito!" : "✅ ¡Producto creado con éxito!");
+        cargarProductos(); 
+        setNuevoProducto(estadoInicial); 
+        setEditando(false); 
+      } else {
+        alert("❌ Error del servidor: " + (d.detalle || d.mensaje || JSON.stringify(d)));
+      }
+    })
+    .catch(err => {
+      console.error("Error de red:", err);
+      alert("❌ No se pudo conectar con el servidor backend.");
+    });
   }
 
   const prepararEdicion = (producto) => { setNuevoProducto(producto); setEditando(true); }
   const eliminarProducto = (sku) => { if(window.confirm(`¿Eliminar ${sku}?`)) fetch(`http://127.0.0.1:8000/productos/${sku}`, { method: 'DELETE' }).then(() => cargarProductos()) }
 
+  const mostrarNotificacion = (mensaje) => {
+    setNotificacion({ visible: true, mensaje });
+    setTimeout(() => { setNotificacion({ visible: false, mensaje: '' }); }, 3000); 
+  }
+
   const agregarAlCarrito = (producto) => {
     const existe = carrito.find(item => item.sku === producto.sku)
     if (existe) {
-      if (existe.cantidad < producto.stock) setCarrito(carrito.map(item => item.sku === producto.sku ? { ...item, cantidad: item.cantidad + 1 } : item))
-      else alert("No hay más stock.")
+      if (existe.cantidad < producto.stock) {
+        setCarrito(carrito.map(item => item.sku === producto.sku ? { ...item, cantidad: item.cantidad + 1 } : item))
+        mostrarNotificacion(`✅ +1 ${producto.nombre} añadido al carrito`);
+      }
+      else alert("No hay más stock disponible de este producto.")
     } else {
-      if (producto.stock > 0) setCarrito([...carrito, { ...producto, cantidad: 1 }]); else alert("Agotado.")
+      if (producto.stock > 0) {
+        setCarrito([...carrito, { ...producto, cantidad: 1 }]);
+        mostrarNotificacion(`✅ ${producto.nombre} añadido al carrito`);
+      }
+      else alert("Este producto está agotado.")
+    }
+  }
+
+  const restarDelCarrito = (sku) => {
+    const existe = carrito.find(item => item.sku === sku);
+    if (existe.cantidad > 1) {
+      setCarrito(carrito.map(item => item.sku === sku ? { ...item, cantidad: item.cantidad - 1 } : item));
+    } else {
+      eliminarDelCarrito(sku);
     }
   }
 
@@ -314,27 +427,99 @@ function App() {
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', backgroundColor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       
+      {notificacion.visible && (
+        <div style={{ 
+          position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', 
+          backgroundColor: '#4CAF50', color: 'white', padding: '15px 25px', 
+          borderRadius: '30px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', 
+          zIndex: 9999, fontWeight: 'bold', fontSize: '15px'
+        }}>
+          {notificacion.mensaje}
+        </div>
+      )}
+
+      <div style={{
+        position: 'fixed', top: 0, right: modalCarritoAbierto ? '0' : '-100%', 
+        width: '100%', maxWidth: '400px', height: '100vh', backgroundColor: '#fff', 
+        boxShadow: '-5px 0 15px rgba(0,0,0,0.2)', transition: 'right 0.3s ease-in-out', 
+        zIndex: 2000, display: 'flex', flexDirection: 'column'
+      }}>
+        <div style={{ padding: '20px', backgroundColor: '#fcee21', borderBottom: '3px solid #000', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>🛒 Mi Carrito</h2>
+          <button onClick={() => setModalCarritoAbierto(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', fontWeight: 'bold', color: '#000' }}>✖</button>
+        </div>
+        
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+          {carrito.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>
+              <span style={{ fontSize: '50px' }}>🛒</span>
+              <p>Tu carrito está vacío.</p>
+              <button onClick={() => setModalCarritoAbierto(false)} style={{ marginTop: '10px', padding: '10px 20px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Seguir Comprando</button>
+            </div>
+          ) : (
+            carrito.map((item) => (
+              <div key={item.sku} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 0', borderBottom: '1px solid #eee' }}>
+                <div style={{ flex: 1, paddingRight: '15px' }}>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>{item.nombre}</p>
+                  <p style={{ margin: 0, fontSize: '15px', color: '#000', fontWeight: 'bold' }}>${(item.precio_venta * item.cantidad).toFixed(2)}</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', border: '2px solid #ccc', borderRadius: '4px', padding: '2px 8px' }}>
+                  <button onClick={() => restarDelCarrito(item.sku)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold' }}>-</button>
+                  <span style={{ fontSize: '15px', fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.cantidad}</span>
+                  <button onClick={() => agregarAlCarrito(item)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold' }}>+</button>
+                </div>
+                <button onClick={() => eliminarDelCarrito(item.sku)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#ccc', marginLeft: '15px' }}>🗑️</button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {carrito.length > 0 && (
+          <div style={{ padding: '20px', borderTop: '2px solid #eee', backgroundColor: '#fafafa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', color: '#000' }}>
+              <span>Total:</span>
+              <span>${totalCarrito.toFixed(2)}</span>
+            </div>
+            <button 
+              onClick={() => { setModalCarritoAbierto(false); iniciarProcesoCompra(); }} 
+              style={{ width: '100%', padding: '15px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+            >
+              Finalizar Compra
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {modalCarritoAbierto && (
+        <div onClick={() => setModalCarritoAbierto(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1999 }}></div>
+      )}
+
       <ModalAuth modalAuthAbierto={modalAuthAbierto} setModalAuthAbierto={setModalAuthAbierto} modoRegistro={modoRegistro} setModoRegistro={setModoRegistro} formAuth={formAuth} manejarCambioAuth={manejarCambioAuth} gestionarLoginRegistro={gestionarLoginRegistro} />
       <ModalFactura modalFacturaAbierto={modalFacturaAbierto} setModalFacturaAbierto={setModalFacturaAbierto} datosFactura={datosFactura} manejarCambioFactura={manejarCambioFactura} enviarDatosFacturaExtra={enviarDatosFacturaExtra} />
-      
-      {/* MODALES DE PAGO Y RECIBO */}
       <ModalMetodoPago modalPagoAbierto={modalPagoAbierto} setModalPagoAbierto={setModalPagoAbierto} seleccionarMetodoPago={seleccionarMetodoPago} totalPagar={totalCarrito} />
       <ModalDatosBanco modalBancoAbierto={modalBancoAbierto} setModalBancoAbierto={setModalBancoAbierto} confirmarTransferencia={confirmarTransferencia} totalPagar={totalCarrito} />
       <ModalRecibo modalReciboAbierto={modalReciboAbierto} setModalReciboAbierto={setModalReciboAbierto} datosRecibo={datosRecibo} />
-
       <ModalAdmin modalAdminAbierto={modalAdminAbierto} setModalAdminAbierto={setModalAdminAbierto} claveAdmin={claveAdmin} setClaveAdmin={setClaveAdmin} verificarAdmin={verificarAdmin} />
       <ModalDetallePedido clienteSeleccionado={clienteSeleccionado} setClienteSeleccionado={setClienteSeleccionado} />
       <ModalMiCuenta modalCuentaAbierto={modalCuentaAbierto} setModalCuentaAbierto={setModalCuentaAbierto} usuarioLogueado={usuarioLogueado} setUsuarioLogueado={setUsuarioLogueado} />
       <ModalMisCompras modalComprasAbierto={modalComprasAbierto} setModalComprasAbierto={setModalComprasAbierto} usuarioLogueado={usuarioLogueado} />
 
+      {/* RUTA PROTEGIDA DE ADMINISTRADOR */}
       {vistaAdmin ? (
-        <AdminPanel irAInicio={irAInicio} pedidosAdmin={pedidosAdmin} setClienteSeleccionado={setClienteSeleccionado} editando={editando} setEditando={setEditando} nuevoProducto={nuevoProducto} estadoInicial={estadoInicial} setNuevoProducto={setNuevoProducto} manejarCambio={manejarCambio} guardarProducto={guardarProducto} productos={productos} prepararEdicion={prepararEdicion} eliminarProducto={eliminarProducto} departamentos={departamentos} />
+        localStorage.getItem('esAdminFerreteria') === 'true' ? (
+          <AdminPanel irAInicio={irAInicio} pedidosAdmin={pedidosAdmin} setClienteSeleccionado={setClienteSeleccionado} editando={editando} setEditando={setEditando} nuevoProducto={nuevoProducto} estadoInicial={estadoInicial} setNuevoProducto={setNuevoProducto} manejarCambio={manejarCambio} guardarProducto={guardarProducto} productos={productos} prepararEdicion={prepararEdicion} eliminarProducto={eliminarProducto} departamentos={departamentos} />
+        ) : (
+          <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'Arial' }}>
+            <h2>⚠️ Acceso Denegado</h2>
+            <p>No tienes los permisos de seguridad necesarios para ver esta sección.</p>
+            <button onClick={irAInicio} style={{ padding: '10px 20px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Volver al Inicio</button>
+          </div>
+        )
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           
-          <Header irAInicio={irAInicio} busqueda={busqueda} setBusqueda={setBusqueda} setCategoriaActiva={setCategoriaActiva} setOfertaActiva={setOfertaActiva} usuarioLogueado={usuarioLogueado} cerrarSesion={cerrarSesion} setModalAuthAbierto={setModalAuthAbierto} setModalAdminAbierto={setModalAdminAbierto} setModalCuentaAbierto={setModalCuentaAbierto} setModalComprasAbierto={setModalComprasAbierto} carrito={carrito} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} seleccionarFavoritos={seleccionarFavoritos} departamentos={departamentos} />
+          <Header irAInicio={irAInicio} busqueda={busqueda} setBusqueda={setBusqueda} setCategoriaActiva={setCategoriaActiva} setOfertaActiva={setOfertaActiva} usuarioLogueado={usuarioLogueado} cerrarSesion={cerrarSesion} setModalAuthAbierto={setModalAuthAbierto} setModalAdminAbierto={setModalAdminAbierto} setModalCuentaAbierto={setModalCuentaAbierto} setModalComprasAbierto={setModalComprasAbierto} setModalCarritoAbierto={setModalCarritoAbierto} carrito={carrito} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} seleccionarFavoritos={seleccionarFavoritos} departamentos={departamentos} />
 
-          {/* Doble clic en el banner para abrir el modal secreto de admin */}
           {mostrarInicio && <div onDoubleClick={() => setModalAdminAbierto(true)}><SeccionInicio departamentos={departamentos} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} /></div>}
 
           <div style={{ padding: '30px 5%', flex: 1 }}>
@@ -422,38 +607,15 @@ function App() {
                   ) : <p style={{ gridColumn: '1 / -1', color: '#666', fontSize: '18px' }}>{viendoFavoritos ? 'Aún no hay productos con 20 o más likes. ¡Empieza a darles amor a tus favoritos!' : 'No se encontraron artículos.'}</p>}
                 </div>
               </div>
-
-              {carrito.length > 0 && (
-                <div style={{ flex: '1', minWidth: '280px', backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', position: 'sticky', top: '180px', border: '2px solid #000' }}>
-                  <h3 style={{ marginTop: 0, borderBottom: '2px solid #fcee21', paddingBottom: '10px', color: '#000' }}>Resumen de compra</h3>
-                  <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '20px' }}>
-                    {carrito.map((item) => (
-                      <div key={item.sku} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
-                        <div style={{ flex: 1, paddingRight: '10px' }}>
-                          <p style={{ margin: 0, fontSize: '13px', color: '#333' }}>{item.nombre}</p>
-                          <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>Cant: {item.cantidad}</p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: '14px' }}>${(item.cantidad * item.precio_venta).toFixed(2)}</span>
-                          <button onClick={() => eliminarDelCarrito(item.sku)} style={{ background: 'none', color: '#cc0000', border: 'none', cursor: 'pointer', fontSize: '16px' }}>✖</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ borderTop: '2px solid #000', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', marginBottom: '20px' }}>
-                    <span>Total:</span><span style={{ color: '#000' }}>${totalCarrito.toFixed(2)}</span>
-                  </div>
-                  <button onClick={iniciarProcesoCompra} style={{ width: '100%', padding: '15px', backgroundColor: '#fcee21', color: '#000', border: '2px solid #000', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>Finalizar Compra</button>
-                </div>
-              )}
             </div>
           </div>
 
+          {/* LAS NUEVAS 4 INSIGNIAS DE CONFIANZA */}
           <div style={{ backgroundColor: '#111', color: '#fff', padding: '25px 5%', display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: '20px', borderTop: '3px solid #fcee21' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🚚</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Envío rápido</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Entregas en 24h a todo Guayaquil</p></div></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🔒</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Compra segura</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Pagos 100% protegidos y cifrados</p></div></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🔄</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Devoluciones fáciles</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>30 días para cambios sin costo</p></div></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>📞</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Atención 24/7</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Soporte por chat, teléfono y correo</p></div></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🛒</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Pedidos 24/7</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Compra online, validación en horario laboral</p></div></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🔒</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Compra segura</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Tus datos están 100% protegidos y cifrados</p></div></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🔄</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Devoluciones</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Sujetas a términos y condiciones del local</p></div></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><span style={{ fontSize: '32px' }}>🏬</span><div><h4 style={{ margin: 0, color: '#fcee21', fontSize: '16px' }}>Retiro en Tienda</h4><p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Cotiza web y retira directo en nuestro local</p></div></div>
           </div>
 
           <Footer irAInicio={irAInicio} seleccionarCategoria={seleccionarCategoria} setModalAdminAbierto={setModalAdminAbierto} />

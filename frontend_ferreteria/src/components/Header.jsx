@@ -12,6 +12,7 @@ export default function Header({
   setModalAdminAbierto, 
   setModalCuentaAbierto,
   setModalComprasAbierto,
+  setModalCarritoAbierto, // ¡Agregado! Faltaba recibir esta instrucción
   carrito, 
   seleccionarCategoria, 
   seleccionarOferta, 
@@ -88,11 +89,9 @@ export default function Header({
             </button>
           )}
 
+          {/* AQUÍ ESTABA EL ERROR DEL CARRITO: AHORA SÍ ABRE LA VENTANA LATERAL */}
           <div 
-            onClick={() => {
-              const resumen = document.getElementById('resumen-compra-movil');
-              if(resumen) resumen.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => setModalCarritoAbierto(true)}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#000', color: '#fcee21', border: '2px solid #000', padding: '10px 20px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px', position: 'relative' }}
           >
             <span>🛒</span> Carrito

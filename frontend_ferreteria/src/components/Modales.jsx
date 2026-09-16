@@ -260,17 +260,93 @@ export function ModalAdmin({ modalAdminAbierto, setModalAdminAbierto, claveAdmin
 export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado }) {
   if (!clienteSeleccionado) return null;
 
-  // Verificamos si el voucher guardado en la base de datos es una URL completa del servidor
   const esUrlServidor = clienteSeleccionado.voucher && clienteSeleccionado.voucher.startsWith("http");
+  const esPendiente = clienteSeleccionado.metodo_pago && clienteSeleccionado.metodo_pago.includes('Pendiente');
+
+  // Recuperar los artículos para mostrarlos en el ticket
+  let itemsTicket = [];
+  try {
+    if (clienteSeleccionado.carrito) {
+      itemsTicket = JSON.parse(clienteSeleccionado.carrito);
+    }
+  } catch (e) {
+    console.error("No se pudo leer los items del pedido");
+  }
+
+  const aprobarPedidoAdmin = async () => {
+    try {
+      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}/aprobar`, {
+        method: 'PUT'
+      });
+      const datos = await respuesta.json();
+      if (datos.estado === "Éxito") {
+        alert("✅ Pedido aprobado y stock descontado correctamente de la bodega.");
+        setClienteSeleccionado(null);
+        window.location.reload(); 
+      } else {
+        alert("Error al aprobar: " + datos.detalle);
+      }
+    } catch (error) {
+      alert("Error de conexión con el servidor.");
+    }
+  };
+
+  const rechazarPedidoAdmin = async () => {
+    const confirmar = window.confirm("¿Estás seguro de RECHAZAR y ELIMINAR este pedido falso/cancelado? Esta acción limpiará la base de datos y no se puede deshacer.");
+    if (!confirmar) return;
+
+    try {
+      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}`, {
+        method: 'DELETE'
+      });
+      const datos = await respuesta.json();
+      if (datos.estado === "Éxito") {
+        alert("❌ Pedido rechazado y eliminado de los registros exitosamente.");
+        setClienteSeleccionado(null);
+        window.location.reload(); 
+      } else {
+        alert("Error al rechazar: " + datos.detalle);
+      }
+    } catch (error) {
+      alert("Error de conexión con el servidor.");
+    }
+  };
+
+  const imprimirRecibo = () => { window.print(); };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-      <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '100%', maxWidth: '450px', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
+      
+      {/* CSS ESPECIAL PARA LA TICKETERA */}
+      <style>{`
+        @media print {
+          @page { margin: 0; size: 80mm auto; }
+          body { margin: 0; padding: 0; background: #fff; }
+          .no-imprimir-modal { display: none !important; }
+          #ticket-pedido-impresion { 
+            display: block !important; 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 72mm; 
+            padding: 4mm;
+            margin: 0 auto; 
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 12px; 
+            color: #000;
+            background: white;
+          }
+        }
+      `}</style>
+
+      {/* MODAL NORMAL DE VISUALIZACIÓN */}
+      <div className="no-imprimir-modal" style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '100%', maxWidth: '450px', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
         <button onClick={() => setClienteSeleccionado(null)} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#666' }}>✖</button>
         
         <h2 style={{ marginTop: 0, color: '#000', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>📦 Detalles del Pedido</h2>
         
         <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.8', marginTop: '15px' }}>
+          <p style={{ margin: 0 }}><strong>Pedido ID:</strong> #{clienteSeleccionado.id}</p>
           <p style={{ margin: 0 }}><strong>Cliente:</strong> {clienteSeleccionado.nombre_cliente}</p>
           <p style={{ margin: 0 }}><strong>Correo:</strong> {clienteSeleccionado.correo_cliente}</p>
           <p style={{ margin: 0 }}><strong>Cédula / RUC:</strong> {clienteSeleccionado.cedula}</p>
@@ -317,9 +393,102 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
             <p style={{ margin: '10px 0 0 0', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>Pago en efectivo (Sin comprobante digital)</p>
           )}
 
-          <p style={{ margin: '15px 0 0 0', fontSize: '16px' }}><strong>Total Pagado:</strong> <span style={{ color: '#008000', fontWeight: 'bold' }}>${parseFloat(clienteSeleccionado.total_pagado).toFixed(2)}</span></p>
+          <p style={{ margin: '15px 0 15px 0', fontSize: '16px' }}><strong>Total Pagado:</strong> <span style={{ color: '#008000', fontWeight: 'bold' }}>${parseFloat(clienteSeleccionado.total_pagado).toFixed(2)}</span></p>
+
+          {esPendiente ? (
+            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+              <button 
+                onClick={aprobarPedidoAdmin}
+                style={{ flex: 1, padding: '12px', backgroundColor: '#2e7d32', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}
+              >
+                ✅ Aprobar y Descontar
+              </button>
+              <button 
+                onClick={rechazarPedidoAdmin}
+                style={{ flex: 1, padding: '12px', backgroundColor: '#c62828', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}
+              >
+                ❌ Rechazar (Eliminar)
+              </button>
+            </div>
+          ) : (
+            <div style={{ padding: '12px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '10px' }}>
+              ✓ Este pedido ya está validado y procesado
+            </div>
+          )}
+
+          {/* BOTÓN MAGICO DE IMPRESIÓN */}
+          <button 
+            onClick={imprimirRecibo}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px', marginTop: '5px' }}
+          >
+            🖨️ Imprimir Recibo del Pedido
+          </button>
         </div>
       </div>
+
+      {/* ESTE DIV SOLO SE VOLVERÁ VISIBLE CUANDO PRESIONES EL BOTON IMPRIMIR */}
+      <div id="ticket-pedido-impresion" style={{ display: 'none' }}>
+        <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+          <h2 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 'bold' }}>FERRETERÍA L E</h2>
+          <p style={{ margin: '2px 0', fontSize: '12px' }}>RUC: 0992837465001</p>
+          <p style={{ margin: '2px 0', fontSize: '12px' }}>Batallón del Suburbio - Guayaquil</p>
+          <p style={{ margin: '2px 0', fontSize: '12px' }}>Tel: 0987654321</p>
+        </div>
+
+        <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+
+        <div style={{ marginBottom: '10px', fontSize: '12px' }}>
+          <p style={{ margin: '2px 0' }}><strong>Pedido:</strong> #{clienteSeleccionado.id}</p>
+          <p style={{ margin: '2px 0' }}><strong>Fecha:</strong> {new Date(clienteSeleccionado.fecha_pedido).toLocaleDateString()}</p>
+          <p style={{ margin: '2px 0' }}><strong>Cliente:</strong> {clienteSeleccionado.nombre_cliente}</p>
+          <p style={{ margin: '2px 0' }}><strong>C.I/RUC:</strong> {clienteSeleccionado.cedula}</p>
+          <p style={{ margin: '2px 0' }}><strong>Pago:</strong> {clienteSeleccionado.metodo_pago}</p>
+        </div>
+
+        <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+
+        {itemsTicket.length > 0 ? (
+          <table style={{ width: '100%', textAlign: 'left', fontSize: '12px', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ borderBottom: '1px dashed #000', paddingBottom: '5px', width: '15%' }}>Cant</th>
+                <th style={{ borderBottom: '1px dashed #000', paddingBottom: '5px', width: '60%' }}>Descripción</th>
+                <th style={{ borderBottom: '1px dashed #000', paddingBottom: '5px', textAlign: 'right', width: '25%' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsTicket.map((it, idx) => (
+                <tr key={idx}>
+                  <td style={{ paddingTop: '5px', verticalAlign: 'top' }}>{it.cantidad}</td>
+                  <td style={{ paddingTop: '5px' }}>
+                    {it.nombre}<br/>
+                    <small style={{ color: '#555' }}>${parseFloat(it.precio_venta).toFixed(2)} c/u</small>
+                  </td>
+                  <td style={{ paddingTop: '5px', textAlign: 'right', verticalAlign: 'top' }}>${(it.precio_venta * it.cantidad).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ textAlign: 'center', fontSize: '11px', color: '#555', fontStyle: 'italic' }}>* Detalle de artículos no disponible en vista rápida *</p>
+        )}
+
+        <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 'bold', margin: '10px 0' }}>
+          <span>TOTAL:</span>
+          <span>${parseFloat(clienteSeleccionado.total_pagado).toFixed(2)}</span>
+        </div>
+
+        <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+
+        <div style={{ textAlign: 'center', fontSize: '11px', marginTop: '15px' }}>
+          <p style={{ margin: '2px 0' }}>¡Gracias por su compra!</p>
+          <p style={{ margin: '2px 0' }}>Revise su mercadería antes de salir.</p>
+          <p style={{ margin: '2px 0' }}>* Documento sin validez tributaria *</p>
+        </div>
+      </div>
+      
     </div>
   );
 }
