@@ -85,6 +85,14 @@ function App() {
     localStorage.setItem('carritoFerreteria', JSON.stringify(carrito));
   }, [carrito]);
 
+  // EFECTO: Actualiza el catálogo automáticamente cada 15 segundos en segundo plano
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      cargarProductos();
+    }, 15000);
+    return () => clearInterval(intervalo);
+  }, []);
+
   useEffect(() => { 
     cargarProductos();
     
@@ -207,7 +215,9 @@ function App() {
     formData.append("whatsapp", wapp);
     formData.append("direccion", dir);
     formData.append("metodo_pago", metodoPagoNombre);
-    formData.append("carrito", JSON.stringify(carrito.map(item => ({ sku: item.cantidad, nombre: item.nombre, precio_venta: item.precio_venta }))));
+    
+    // CORREGIDO: Se envía correctamente el sku y la cantidad del carrito
+    formData.append("carrito", JSON.stringify(carrito.map(item => ({ sku: item.sku, nombre: item.nombre, precio_venta: item.precio_venta, cantidad: item.cantidad }))));
     
     if (archivoVoucherObj) {
       formData.append("voucher_file", archivoVoucherObj);
@@ -229,10 +239,10 @@ function App() {
           total_pagado: totalCarrito,
           carrito: [...carrito]
         });
-        setCarrito([]); // Se vacía solo después de comprar
-        cargarProductos();
+        setCarrito([]); // Se vacía el carrito
+        cargarProductos(); // RECARGA AUTOMÁTICA DEL STOCK EN TIEMPO REAL
         setModalReciboAbierto(true); 
-      } else alert("Error al procesar el pedido.")
+      } else alert("Error al procesar el pedido: " + (datos.detalle || ""));
     })
   }
 

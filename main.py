@@ -375,12 +375,13 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
         contenido = await file.read()
         
         try:
-            df = pd.read_excel(io.BytesIO(contenido), header=4, engine='openpyxl')
-        except Exception:
-            try:
-                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl')
-            except Exception as e:
-                return {"estado": "Error", "detalle": f"No se pudo leer el archivo Excel. Asegúrate de que sea un .xlsx válido. Detalle: {str(e)}"}
+            df = pd.read_excel(io.BytesIO(contenido), skiprows=3, engine='openpyxl')
+            if len(df) > 0:
+                headers = df.iloc[0].values
+                df = df.iloc[1:].copy()
+                df.columns = [str(h).strip() for h in headers]
+        except Exception as e:
+            return {"estado": "Error", "detalle": f"No se pudo leer el Excel: {str(e)}"}
 
         df.columns = df.columns.astype(str).str.strip()
         
@@ -389,20 +390,17 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
         
         importados = 0
         for index, fila in df.iterrows():
-            # Extraer Descripción del Artículo
+            # 1. Extraer Descripción
             nombre_excel = ""
             for col_n in ['Descripción del Artículo', 'Descripcion del Articulo', 'Descripcion', 'Descripción', 'nombre', 'producto']:
                 if col_n in df.columns and pd.notna(fila[col_n]):
-                    try:
-                        nombre_excel = str(fila[col_n]).encode('utf-8', errors='ignore').decode('utf-8').strip()
-                        break
-                    except:
-                        nombre_excel = str(fila[col_n]).strip()
+                    nombre_excel = str(fila[col_n]).strip()
+                    break
             
             if not nombre_excel or nombre_excel.lower() in ['nan', 'none', '', 'hoja de toma física de inventario', 'responsable del conteo:']:
                 continue
             
-            # Extraer Código / SKU
+            # 2. Extraer SKU
             sku_excel = ""
             for col_sku in ['Código / SKU', 'Codigo / SKU', 'SKU', 'Código', 'Codigo', 'sku']:
                 if col_sku in df.columns and pd.notna(fila[col_sku]):
@@ -413,14 +411,11 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
                 sku_final = "GEN-" + uuid.uuid4().hex[:6].upper()
             else:
                 try:
-                    if 'e+' in sku_excel.lower() or '.' in sku_excel:
-                        sku_final = str(int(float(sku_excel)))
-                    else:
-                        sku_final = sku_excel
+                    sku_final = str(int(float(sku_excel))) if ('e+' in sku_excel.lower() or '.' in sku_excel) else sku_excel
                 except:
                     sku_final = sku_excel
 
-            # Extraer Precio Unitario
+            # 3. Extraer Precio
             precio = 0.0
             for col_p in ['precio unitario', 'Precio unitario', 'Precio Unitario', 'precio', 'PVP']:
                 if col_p in df.columns and pd.notna(fila[col_p]):
@@ -430,7 +425,7 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
                     except:
                         pass
             
-            # Extraer Cantidad Contada (Stock)
+            # 4. Extraer Stock (Cantidad Contada)
             stock_excel = 0
             for col_s in ['Cantidad Contada', 'cantidad contada', 'Stock', 'Cantidad', 'stock']:
                 if col_s in df.columns and pd.notna(fila[col_s]):
@@ -440,40 +435,44 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
                     except:
                         pass
 
-            # --- LECTURA DIRECTA DE LA COLUMNA CATEGORÍA DEL EXCEL ---
+            # 5. ASIGNACIÓN DIRECTA DE ID DE CATEGORÍA
             cat_excel = ""
             for col_c in ['Categoría', 'Categoria', 'categoría', 'categoria']:
                 if col_c in df.columns and pd.notna(fila[col_c]):
                     cat_excel = str(fila[col_c]).strip().lower()
                     break
             
-            id_cat = 4  # Por defecto: General / Varios
-            
-            if 'cocina' in cat_excel:
-                id_cat = 10  # ID para Cocina
-            elif 'baño' in cat_excel or 'banio' in cat_excel:
-                id_cat = 9   # ID para Baño
-            elif 'gafiteria' in cat_excel or 'plomeria' in cat_excel or 'plomería' in cat_excel:
-                id_cat = 5   # Plomería / Gafitería
-            elif 'electricidad' in cat_excel:
-                id_cat = 3   # Electricidad
-            elif 'pintura' in cat_excel:
-                id_cat = 6   # Pintura
-            elif 'construccion' in cat_excel or 'construcción' in cat_excel:
-                id_cat = 2   # Construcción
-            elif 'herramienta' in cat_excel:
-                id_cat = 1   # Herramientas
+            id_cat = 1
+            if any(w in cat_excel for w in ['baño', 'banio', 'gafiteria', 'herraje', 'accesorio']):
+                id_cat = 4
+            elif any(w in cat_excel for w in ['plomeria', 'plomería', 'polietileno', 'fluido']):
+                id_cat = 5
+            elif any(w in cat_excel for w in ['cocina']):
+                id_cat = 11
+            elif any(w in cat_excel for w in ['electricidad', 'electronica', 'electrónica']):
+                id_cat = 3
+            elif any(w in cat_excel for w in ['pintura', 'esmalte']):
+                id_cat = 6
+            elif any(w in cat_excel for w in ['jardin', 'jardín']):
+                id_cat = 12
+            elif any(w in cat_excel for w in ['herramienta']):
+                id_cat = 1
+            elif any(w in cat_excel for w in ['construccion', 'construcción', 'impermeabilizantes']):
+                id_cat = 2
+            elif any(w in cat_excel for w in ['insumo quimico', 'quimico', 'pegamento']):
+                id_cat = 10
             else:
-                # Respaldo por nombre si la columna está vacía
                 nombre_lower = nombre_excel.lower()
                 if any(w in nombre_lower for w in ['codo', 'tubo', 'te', 'pvc', 'valvula', 'grifo', 'sifon']):
-                    id_cat = 5
+                    id_cat = 4
                 elif any(w in nombre_lower for w in ['cable', 'foco', 'interruptor', 'toma']):
                     id_cat = 3
+                elif any(w in nombre_lower for w in ['pintura', 'esmalte', 'broca', 'rodillo']):
+                    id_cat = 6
                 else:
-                    id_cat = 4
-            # ----------------------------------------------------
+                    id_cat = 1
 
+            # 6. Insertar o Actualizar en la Base de Datos
             cursor.execute("SELECT sku FROM productos WHERE sku = %s OR nombre = %s", (sku_final, nombre_excel))
             existente = cursor.fetchone()
             
@@ -494,10 +493,11 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("SINCRONIZACIÓN EXCEL", f"Archivo: {file.filename} ({importados} productos)")
-        return {"estado": "Éxito", "mensaje": f"¡Se sincronizaron {importados} productos respetando las categorías del Excel!"}
+        registrar_log_interno("SINCRONIZACIÓN EXCEL", f"Sincronizados {importados} productos correctamente.")
+        return {"estado": "Éxito", "mensaje": f"¡Se sincronizaron {importados} productos con sus categorías correctas!"}
     except Exception as error:
         return {"estado": "Error", "detalle": f"Error al procesar el archivo: {str(error)}"}
+        
                 
 @app.put("/productos/{sku}")
 def actualizar_producto(sku: str, producto: ProductoNuevo):

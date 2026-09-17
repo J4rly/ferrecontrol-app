@@ -12,7 +12,7 @@ export default function Header({
   setModalAdminAbierto, 
   setModalCuentaAbierto,
   setModalComprasAbierto,
-  setModalCarritoAbierto, // ¡Agregado! Faltaba recibir esta instrucción
+  setModalCarritoAbierto,
   carrito, 
   seleccionarCategoria, 
   seleccionarOferta, 
@@ -36,7 +36,7 @@ export default function Header({
           <img 
             src="/logo.jpeg" 
             alt="Ferretería L E" 
-            style={{ height: '55px', objectFit: 'contain', backgroundColor: '#fcee21', padding: '2px', borderRadius: '4px' }} 
+            style={{ height: '115px', objectFit: 'contain', backgroundColor: '#fcee21', padding: '2px', borderRadius: '4px' }} 
           />
         </div>
 
@@ -89,7 +89,7 @@ export default function Header({
             </button>
           )}
 
-          {/* AQUÍ ESTABA EL ERROR DEL CARRITO: AHORA SÍ ABRE LA VENTANA LATERAL */}
+          {/* CARRITO */}
           <div 
             onClick={() => setModalCarritoAbierto(true)}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#000', color: '#fcee21', border: '2px solid #000', padding: '10px 20px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px', position: 'relative' }}
