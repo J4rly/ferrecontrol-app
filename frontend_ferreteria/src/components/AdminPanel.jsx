@@ -39,6 +39,51 @@ function AdminPanel({
   const [modalOrdenAbierto, setModalOrdenAbierto] = useState(false);
   const [nuevaOrden, setNuevaOrden] = useState({ proveedor_id: '', total_estimado: '', detalles_items: '' });
 
+  // ESTADOS PARA EDICIÓN, ABONOS Y HISTORIAL A PROVEEDORES
+  const [modalEditarOrdenAbierto, setModalEditarOrdenAbierto] = useState(false);
+  const [ordenAEditar, setOrdenAEditar] = useState(null);
+  const [modalAbonoProveedorAbierto, setModalAbonoProveedorAbierto] = useState(false);
+  const [ordenSeleccionadaAbono, setOrdenSeleccionadaAbono] = useState(null);
+  const [datosAbonoProv, setDatosAbonoProv] = useState({ monto: '', tipo_pago: 'Transferencia', referencia: '' });
+  
+  const [modalHistorialAbonosAbierto, setModalHistorialAbonosAbierto] = useState(false);
+  const [listaAbonosOrden, setListaAbonosOrden] = useState([]);
+  const [ordenSeleccionadaHistorial, setOrdenSeleccionadaHistorial] = useState(null);
+
+  // ESTADOS PARA CIERRE DE CAJA
+  const [resumenCajaHoy, setResumenCajaHoy] = useState({ efectivo: 0, transferencia: 0, credito: 0, gran_total: 0 });
+  const [efectivoContado, setEfectivoContado] = useState('');
+  const [observacionesCaja, setObservacionesCaja] = useState('');
+  const [historialCierres, setHistorialCierres] = useState([]);
+  const [filtroFechaHistorial, setFiltroFechaHistorial] = useState('');
+
+  // ESTADOS PARA TENDENCIA DE INGRESOS Y FILTRO DE FECHAS
+  const [datosGraficoVentas, setDatosGraficoVentas] = useState([]);
+  const [fechaInicioTendencia, setFechaInicioTendencia] = useState('');
+  const [fechaFinTendencia, setFechaFinTendencia] = useState('');
+
+  const cargarTendenciaIngresos = async (inicio = '', fin = '') => {
+    try {
+      let url = 'http://127.0.0.1:8000/tendencia-ingresos';
+      const params = [];
+      if (inicio) params.push(`fecha_inicio=${inicio}`);
+      if (fin) params.push(`fecha_fin=${fin}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.estado === "Éxito") {
+        const formateada = data.tendencia.map(item => ({
+          fecha: item.fecha.slice(5),
+          ventas: item.ventas
+        }));
+        setDatosGraficoVentas(formateada);
+      }
+    } catch (error) {
+      console.error("Error al cargar tendencia:", error);
+    }
+  };
+
   const cargarLogsAuditoria = async () => {
     try {
       const respuesta = await fetch('http://127.0.0.1:8000/auditoria');
@@ -67,10 +112,26 @@ function AdminPanel({
     } catch (error) { console.error(error); }
   };
 
+  const cargarResumenCaja = async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/caja/resumen-hoy');
+      const data = await res.json();
+      if (data.estado === "Éxito") setResumenCajaHoy(data.resumen);
+
+      const resHist = await fetch('http://127.0.0.1:8000/caja/historial');
+      const dataHist = await resHist.json();
+      if (dataHist.estado === "Éxito") setHistorialCierres(dataHist.cierres);
+    } catch (error) { console.error("Error al cargar caja:", error); }
+  };
+
   useEffect(() => {
     cargarLogsAuditoria();
     cargarCreditos();
     cargarProveedoresYOrdenes();
+    cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
+    if (pestañaActiva === 'caja') {
+      cargarResumenCaja();
+    }
   }, [pestañaActiva]);
 
   const [carritoPOS, setCarritoPOS] = useState([]);
@@ -103,6 +164,7 @@ function AdminPanel({
       cargarLogsAuditoria();
       cargarCreditos();
       cargarProveedoresYOrdenes();
+      cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
     } catch (error) { console.error(error); }
   };
 
@@ -204,6 +266,120 @@ function AdminPanel({
     } catch (err) { alert("Error de conexión."); }
   };
 
+  const guardarEdicionOrden = async (e) => {
+    e.preventDefault();
+    if (!ordenAEditar) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ordenAEditar.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          total_estimado: parseFloat(ordenAEditar.total_estimado),
+          detalles_items: ordenAEditar.detalles_items,
+          metodo_pago_credito: ordenAEditar.metodo_pago_credito || 'Crédito General'
+        })
+      });
+      const data = await res.json();
+      if (data.estado === "Éxito") {
+        alert("✅ Orden de compra actualizada correctamente.");
+        setModalEditarOrdenAbierto(false);
+        setOrdenAEditar(null);
+        cargarProveedoresYOrdenes();
+      } else { alert("Error: " + data.detalle); }
+    } catch (err) { alert("Error de conexión."); }
+  };
+
+  const registrarAbonoProveedor = async (e) => {
+    e.preventDefault();
+    if (!ordenSeleccionadaAbono || !datosAbonoProv.monto) return;
+    try {
+      const res = await fetch('http://127.0.0.1:8000/ordenes-compra/abonar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orden_id: ordenSeleccionadaAbono.id,
+          monto_abonado: parseFloat(datosAbonoProv.monto),
+          tipo_pago: datosAbonoProv.tipo_pago,
+          referencia_banco: datosAbonoProv.referencia || 'S/N'
+        })
+      });
+      const data = await res.json();
+      if (data.estado === "Éxito") {
+        alert(`✅ Abono por ${datosAbonoProv.tipo_pago} registrado con éxito.`);
+        setModalAbonoProveedorAbierto(false);
+        setOrdenSeleccionadaAbono(null);
+        setDatosAbonoProv({ monto: '', tipo_pago: 'Transferencia', referencia: '' });
+        cargarProveedoresYOrdenes();
+      } else { alert("Error: " + data.detalle); }
+    } catch (err) { alert("Error de conexión con el servidor."); }
+  };
+
+  const verHistorialAbonos = async (ord) => {
+    try {
+      // Consultar la orden más fresca para actualizar el saldo pendiente exacto
+      const resOrd = await fetch('http://127.0.0.1:8000/ordenes-compra');
+      const dataOrd = await resOrd.json();
+      if (dataOrd.estado === "Éxito") {
+        const actualizada = dataOrd.ordenes.find(o => o.id === ord.id) || ord;
+        setOrdenSeleccionadaHistorial(actualizada);
+      } else {
+        setOrdenSeleccionadaHistorial(ord);
+      }
+
+      // Consultar los abonos de esta orden
+      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ord.id}/abonos`);
+      const data = await res.json();
+      if (data.estado === "Éxito") {
+        setListaAbonosOrden(data.abonos);
+        setModalHistorialAbonosAbierto(true);
+      } else {
+        alert("Error al cargar abonos: " + data.detalle);
+      }
+    } catch (err) {
+      alert("Error de conexión con el servidor.");
+    }
+  };
+
+  const ejecutarCierreCaja = async (e) => {
+    e.preventDefault();
+    if (efectivoContado === '' || isNaN(efectivoContado)) {
+      alert("Por favor ingresa el monto físico contado en caja.");
+      return;
+    }
+
+    const contadoNum = parseFloat(efectivoContado);
+    const diferenciaCalculada = contadoNum - resumenCajaHoy.efectivo;
+
+    const datosCierre = {
+      total_efectivo: resumenCajaHoy.efectivo,
+      total_transferencia: resumenCajaHoy.transferencia,
+      total_credito: resumenCajaHoy.credito,
+      gran_total_sistema: resumenCajaHoy.gran_total,
+      efectivo_contado: contadoNum,
+      diferencia: diferenciaCalculada,
+      observaciones: observacionesCaja || "Sin observaciones"
+    };
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/caja/cerrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datosCierre)
+      });
+      const data = await res.json();
+      if (data.estado === "Éxito") {
+        alert(`✅ Cierre de caja registrado con éxito. Diferencia: $${diferenciaCalculada.toFixed(2)}`);
+        setEfectivoContado('');
+        setObservacionesCaja('');
+        cargarResumenCaja();
+      } else {
+        alert("Error al realizar cierre: " + data.detalle);
+      }
+    } catch (err) {
+      alert("Error de conexión con el servidor.");
+    }
+  };
+
   // --- FILTROS DE INVENTARIO ---
   let productosFiltrados = listaProductos.filter(p => {
     const coincideTexto = p.nombre.toLowerCase().includes(busquedaAdmin.toLowerCase()) || p.sku.toLowerCase().includes(busquedaAdmin.toLowerCase());
@@ -231,6 +407,12 @@ function AdminPanel({
   const logsFiltrados = listaLogs.filter(log => log.accion.toLowerCase().includes(busquedaLogs.toLowerCase()) || log.detalles.toLowerCase().includes(busquedaLogs.toLowerCase()) || log.usuario.toLowerCase().includes(busquedaLogs.toLowerCase()));
   const creditosFiltrados = listaCreditos.filter(c => c.nombre_cliente.toLowerCase().includes(busquedaCreditos.toLowerCase()) || c.cedula.toLowerCase().includes(busquedaCreditos.toLowerCase()));
 
+  // FILTRO PARA EL HISTORIAL DE CIERRES DE CAJA
+  const historialCierresFiltrados = historialCierres.filter(c => {
+    if (!filtroFechaHistorial) return true;
+    return c.fecha_cierre && c.fecha_cierre.startsWith(filtroFechaHistorial);
+  });
+
   const agregarAlPOS = (producto) => {
     if (producto.stock <= 0) return alert(`El producto "${producto.nombre}" está agotado en bodega.`);
     const existe = carritoPOS.find(item => item.sku === producto.sku);
@@ -249,7 +431,37 @@ function AdminPanel({
   };
 
   const eliminarDelPOS = (sku) => setCarritoPOS(carritoPOS.filter(item => item.sku !== sku));
-  const manejarCambioPOS = (e) => setDatosPOS({ ...datosPOS, [e.target.name]: e.target.value });
+
+  // MANEJO DE CAMBIO Y BÚSQUEDA AUTOMÁTICA SEGURA DE CÉDULA/RUC EN EL POS
+  const manejarCambioPOS = async (e) => {
+    const { name, value } = e.target;
+    setDatosPOS({ ...datosPOS, [name]: value });
+
+    if (name === 'cedula' && (value.length === 10 || value.length === 13)) {
+      try {
+        const respuesta = await fetch(`http://127.0.0.1:8000/buscar-cliente/${value}`);
+        const datos = await respuesta.json();
+        
+        if (datos.estado === "Éxito") {
+          if (datos.encontrado_local && datos.cliente) {
+            setDatosPOS(prev => ({
+              ...prev,
+              nombre: datos.cliente.nombres,
+              apellido: datos.cliente.apellidos,
+              direccion: datos.cliente.direccion,
+              telefono: datos.cliente.telefono,
+              correo: datos.cliente.correo
+            }));
+          } else {
+            console.log("Cédula correcta, ingrese datos del cliente nuevo.");
+          }
+        }
+      } catch (error) {
+        console.error("Error al consultar cliente:", error);
+      }
+    }
+  };
+
   const totalPOS = carritoPOS.reduce((t, item) => t + (item.precio_venta * item.cantidad), 0);
 
   const procesarVentaPOS = async () => {
@@ -285,7 +497,11 @@ function AdminPanel({
         setCarritoPOS([]);
         setDatosPOS({ nombre: '', apellido: '', cedula: '', direccion: '', correo: '', telefono: '' });
         setEsConsumidorFinal(true);
-        recargarDatosEnSegundoPlano(); 
+        
+        // ACTUALIZACIÓN AUTOMÁTICA Y SINCRÓNICA DE DATOS Y TENDENCIA
+        await recargarDatosEnSegundoPlano();
+        cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
+
         setModalImprimirAbierto(true); 
       } else alert("Error al procesar: " + datos.detalle);
     } catch (error) { alert("Error de conexión con el servidor."); }
@@ -313,15 +529,6 @@ function AdminPanel({
   const ventasHoy = pedidosCaja.filter(ped => ped.fecha_pedido && ped.fecha_pedido.startsWith(hoyStr)).reduce((acc, ped) => acc + parseFloat(ped.total_pagado || 0), 0);
   const pedidosFiltradosPorFecha = pedidosCaja.filter(ped => ped.fecha_pedido && ped.fecha_pedido.startsWith(fechaFiltro));
   const totalFiltradoPorFecha = pedidosFiltradosPorFecha.reduce((acc, ped) => acc + parseFloat(ped.total_pagado || 0), 0);
-
-  const ventasPorFechaMap = {};
-  pedidosCaja.forEach(ped => {
-    if (ped.fecha_pedido) {
-      const fecha = ped.fecha_pedido.split('T')[0];
-      ventasPorFechaMap[fecha] = (ventasPorFechaMap[fecha] || 0) + parseFloat(ped.total_pagado || 0);
-    }
-  });
-  const datosGraficoVentas = Object.keys(ventasPorFechaMap).sort().map(fecha => ({ fecha: fecha.slice(5), ventas: ventasPorFechaMap[fecha] }));
 
   const productosAgotados = listaProductos.filter(p => p.stock === 0);
   const productosActivos = listaProductos.filter(p => p.stock > 0);
@@ -353,11 +560,12 @@ function AdminPanel({
           <button onClick={() => setSidebarColapsado(!sidebarColapsado)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer', padding: 0 }}>☰</button>
         </div>
         <nav style={{ flex: 1, paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <button onClick={() => setPestañaActiva('dashboard')} style={getBotonSidebarStyle('dashboard')}><span style={{ fontSize: '20px' }}>📊</span> {!sidebarColapsado && <span>Dashboard Analítico</span>}</button>
+          <button onClick={() => { setPestañaActiva('dashboard'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('dashboard')}><span style={{ fontSize: '20px' }}>📊</span> {!sidebarColapsado && <span>Dashboard Analítico</span>}</button>
           <button onClick={() => setPestañaActiva('pos')} style={getBotonSidebarStyle('pos')}><span style={{ fontSize: '20px' }}>🏪</span> {!sidebarColapsado && <span>Facturación POS</span>}</button>
           <button onClick={() => setPestañaActiva('inventario')} style={getBotonSidebarStyle('inventario')}><span style={{ fontSize: '20px' }}>🗄️</span> {!sidebarColapsado && <span>Inventario</span>}</button>
           <button onClick={() => setPestañaActiva('pedidos')} style={getBotonSidebarStyle('pedidos')}><span style={{ fontSize: '20px' }}>📦</span> {!sidebarColapsado && <span>Ventas & Pedidos</span>}</button>
           <button onClick={() => setPestañaActiva('creditos')} style={getBotonSidebarStyle('creditos')}><span style={{ fontSize: '20px' }}>💳</span> {!sidebarColapsado && <span>Créditos & Fiados</span>}</button>
+          <button onClick={() => setPestañaActiva('caja')} style={getBotonSidebarStyle('caja')}><span style={{ fontSize: '20px' }}>🧮</span> {!sidebarColapsado && <span>Cierre de Caja</span>}</button>
           <button onClick={() => setPestañaActiva('proveedores')} style={getBotonSidebarStyle('proveedores')}><span style={{ fontSize: '20px' }}>🏭</span> {!sidebarColapsado && <span>Proveedores & Órdenes</span>}</button>
           <button onClick={() => setPestañaActiva('auditoria')} style={getBotonSidebarStyle('auditoria')}><span style={{ fontSize: '20px' }}>🛡️</span> {!sidebarColapsado && <span>Auditoría & Logs</span>}</button>
           <button onClick={() => setPestañaActiva('ajustes')} style={getBotonSidebarStyle('ajustes')}><span style={{ fontSize: '20px' }}>⚙️</span> {!sidebarColapsado && <span>Carga & Ajustes</span>}</button>
@@ -490,9 +698,44 @@ function AdminPanel({
                 <h3 style={{ margin: 0, color: '#fcee21', fontSize: '15px' }}>📥 Reportes Gerenciales y Contabilidad</h3>
                 <p style={{ margin: '3px 0 0 0', color: '#8da2b5', fontSize: '12px' }}>Descarga la información oficial del negocio en formato Excel (.xlsx)</p>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => window.open('http://127.0.0.1:8000/exportar/inventario', '_blank')} style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>📊 Descargar Inventario</button>
-                <button onClick={() => window.open('http://127.0.0.1:8000/exportar/pedidos', '_blank')} style={{ backgroundColor: '#0288d1', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>📈 Descargar Ventas / Pedidos</button>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button onClick={() => window.open('http://127.0.0.1:8000/exportar/inventario', '_blank')} style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📊 Descargar Inventario</button>
+                <button onClick={() => window.open('http://127.0.0.1:8000/exportar/pedidos', '_blank')} style={{ backgroundColor: '#0288d1', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📈 Historial Completo</button>
+              </div>
+            </div>
+
+            {/* NUEVA TARJETA DE REPORTE POR RANGO DE FECHAS */}
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '25px', backgroundColor: '#101e2e', padding: '15px 25px', borderRadius: '8px', border: '1px solid #1a2f44', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#fcee21', fontSize: '15px' }}>📅 Reporte de Ventas por Rango Personalizado</h3>
+                <p style={{ margin: '3px 0 0 0', color: '#8da2b5', fontSize: '12px' }}>Selecciona un período de tiempo para auditoría o cálculo de ganancias</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input 
+                  type="date" 
+                  id="RangoInicio" 
+                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #1a2f44', backgroundColor: '#0b1622', color: '#fff', fontSize: '12px' }} 
+                />
+                <span style={{ color: '#8da2b5', fontSize: '12px' }}>hasta</span>
+                <input 
+                  type="date" 
+                  id="RangoFin" 
+                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #1a2f44', backgroundColor: '#0b1622', color: '#fff', fontSize: '12px' }} 
+                />
+                <button 
+                  onClick={() => {
+                    const inicio = document.getElementById('RangoInicio').value;
+                    const fin = document.getElementById('RangoFin').value;
+                    if (!inicio || !fin) {
+                      alert("Por favor selecciona ambas fechas (inicio y fin).");
+                      return;
+                    }
+                    window.open(`http://127.0.0.1:8000/exportar/pedidos-rango?fecha_inicio=${inicio}&fecha_fin=${fin}`, '_blank');
+                  }}
+                  style={{ backgroundColor: '#9c27b0', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
+                >
+                  📥 Descargar Reporte Rango
+                </button>
               </div>
             </div>
 
@@ -523,35 +766,77 @@ function AdminPanel({
               </div>
             </div>
 
+            {/* SECCIÓN DE TENDENCIA DE INGRESOS CON FILTROS DE FECHA */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '20px', marginBottom: '25px' }}>
               <div style={{ backgroundColor: '#101e2e', padding: '25px', borderRadius: '8px', border: '1px solid #1a2f44' }}>
-                <h3 style={{ margin: '0 0 20px 0', color: '#fff', fontSize: '16px' }}>📈 Tendencia de Ingresos (Histórico)</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>📈 Tendencia de Ingresos</h3>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input 
+                      type="date" 
+                      value={fechaInicioTendencia} 
+                      onChange={(e) => setFechaInicioTendencia(e.target.value)} 
+                      style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #1a2f44', backgroundColor: '#0b1622', color: '#fff', fontSize: '11px' }} 
+                    />
+                    <span style={{ color: '#8da2b5', fontSize: '11px' }}>hasta</span>
+                    <input 
+                      type="date" 
+                      value={fechaFinTendencia} 
+                      onChange={(e) => setFechaFinTendencia(e.target.value)} 
+                      style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #1a2f44', backgroundColor: '#0b1622', color: '#fff', fontSize: '11px' }} 
+                    />
+                    <button 
+                      onClick={() => cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia)} 
+                      style={{ padding: '4px 10px', backgroundColor: '#fcee21', color: '#000', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px' }}
+                    >
+                      Filtrar
+                    </button>
+                    <button 
+                      onClick={() => { setFechaInicioTendencia(''); setFechaFinTendencia(''); cargarTendenciaIngresos('', ''); }} 
+                      style={{ padding: '4px 8px', backgroundColor: '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                      title="Ver últimos 30 días"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
                 <div style={{ width: '100%', height: '260px' }}>
                   {datosGraficoVentas.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={datosGraficoVentas}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1a2f44" />
-                        <XAxis dataKey="fecha" stroke="#8da2b5" fontSize={12} />
+                        <XAxis dataKey="fecha" stroke="#8da2b5" fontSize={11} />
                         <YAxis stroke="#8da2b5" fontSize={12} tickFormatter={(val) => `$${val}`} />
                         <Tooltip contentStyle={{ backgroundColor: '#070d14', border: '1px solid #1a2f44', color: '#fff' }} />
                         <Line type="monotone" dataKey="ventas" stroke="#fcee21" strokeWidth={3} />
                       </LineChart>
                     </ResponsiveContainer>
-                  ) : <div style={{ color: '#8da2b5', textAlign: 'center', padding: '50px' }}>Sin datos de ventas.</div>}
+                  ) : <div style={{ color: '#8da2b5', textAlign: 'center', padding: '50px' }}>Sin datos de ventas en este rango.</div>}
                 </div>
               </div>
 
+              {/* GRÁFICO DE BARRAS MODERNIZADO */}
               <div style={{ backgroundColor: '#101e2e', padding: '25px', borderRadius: '8px', border: '1px solid #1a2f44' }}>
                 <h3 style={{ margin: '0 0 20px 0', color: '#fff', fontSize: '16px' }}>📊 Volumen de Ventas por Categoría</h3>
                 <div style={{ width: '100%', height: '260px' }}>
                   {datosGraficoCategorias.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={datosGraficoCategorias}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1a2f44" />
-                        <XAxis dataKey="categoria" stroke="#8da2b5" fontSize={11} />
-                        <YAxis stroke="#8da2b5" fontSize={12} />
-                        <Tooltip contentStyle={{ backgroundColor: '#070d14', border: '1px solid #1a2f44', color: '#fff' }} />
-                        <Bar dataKey="cantidad" fill="#4caf50" />
+                        <defs>
+                          <linearGradient id="colorVentasCat" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#fcee21" stopOpacity={0.9}/>
+                            <stop offset="95%" stopColor="#4caf50" stopOpacity={0.6}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1a2f44" vertical={false} />
+                        <XAxis dataKey="categoria" stroke="#8da2b5" fontSize={11} tickLine={false} />
+                        <YAxis stroke="#8da2b5" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                          contentStyle={{ backgroundColor: '#070d14', border: '1px solid #1a2f44', borderRadius: '6px', color: '#fff' }} 
+                        />
+                        <Bar dataKey="cantidad" fill="url(#colorVentasCat)" radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : <div style={{ color: '#8da2b5', textAlign: 'center', padding: '50px' }}>Sin ventas por categoría.</div>}
@@ -725,6 +1010,121 @@ function AdminPanel({
           </div>
         )}
 
+        {/* PESTAÑA: CIERRE DE CAJA */}
+        {pestañaActiva === 'caja' && (
+          <div className="no-print" style={{ backgroundColor: '#fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)', padding: '20px', overflowY: 'auto' }}>
+            <div style={{ borderBottom: '1px solid #eaeaea', paddingBottom: '15px', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, color: '#333', fontSize: '20px' }}>🧮 Cierre de Caja y Arqueo Diario</h2>
+              <p style={{ margin: '3px 0 0 0', color: '#666', fontSize: '12px' }}>Consolidación de ingresos del día y control de efectivo físico en caja.</p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '25px' }}>
+              <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>Ventas en Efectivo (Sistema)</span>
+                <h3 style={{ margin: '5px 0 0 0', color: '#2e7d32', fontSize: '22px' }}>${resumenCajaHoy.efectivo.toFixed(2)}</h3>
+              </div>
+              <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>Ventas por Transferencia</span>
+                <h3 style={{ margin: '5px 0 0 0', color: '#0288d1', fontSize: '22px' }}>${resumenCajaHoy.transferencia.toFixed(2)}</h3>
+              </div>
+              <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>Créditos / Fiados del Día</span>
+                <h3 style={{ margin: '5px 0 0 0', color: '#c62828', fontSize: '22px' }}>${resumenCajaHoy.credito.toFixed(2)}</h3>
+              </div>
+              <div style={{ backgroundColor: '#fffdee', padding: '15px', borderRadius: '6px', border: '1px solid #fcee21' }}>
+                <span style={{ fontSize: '12px', color: '#854d0e', fontWeight: 'bold' }}>Total Ingresos (Efectivo + Transf.)</span>
+                <h3 style={{ margin: '5px 0 0 0', color: '#000', fontSize: '22px' }}>${resumenCajaHoy.gran_total.toFixed(2)}</h3>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+              <div style={{ backgroundColor: '#fafafa', padding: '20px', borderRadius: '8px', border: '1px solid #ddd' }}>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', color: '#333' }}>📝 Ejecutar Arqueo de Caja</h3>
+                <form onSubmit={ejecutarCierreCaja} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <label style={estiloLabel}>Efectivo Físico Contado en Caja ($):</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="0.00" 
+                    value={efectivoContado} 
+                    onChange={(e) => setEfectivoContado(e.target.value)} 
+                    required 
+                    style={estiloInput} 
+                  />
+
+                  {efectivoContado !== '' && !isNaN(efectivoContado) && (
+                    <div style={{ padding: '10px', borderRadius: '4px', backgroundColor: (parseFloat(efectivoContado) - resumenCajaHoy.efectivo) === 0 ? '#e8f5e9' : '#ffebee', color: (parseFloat(efectivoContado) - resumenCajaHoy.efectivo) === 0 ? '#2e7d32' : '#c62828', fontWeight: 'bold', fontSize: '13px' }}>
+                      Diferencia: ${(parseFloat(efectivoContado) - resumenCajaHoy.efectivo).toFixed(2)} 
+                      { (parseFloat(efectivoContado) - resumenCajaHoy.efectivo) === 0 ? ' (Caja Cuadrada Exacta)' : (parseFloat(efectivoContado) - resumenCajaHoy.efectivo) > 0 ? ' (Sobrante)' : ' (Faltante)' }
+                    </div>
+                  )}
+
+                  <label style={estiloLabel}>Observaciones / Novedades:</label>
+                  <textarea 
+                    placeholder="Ej. Se dejó vuelto inicial de $50..." 
+                    value={observacionesCaja} 
+                    onChange={(e) => setObservacionesCaja(e.target.value)} 
+                    style={{ ...estiloInput, minHeight: '60px' }} 
+                  />
+
+                  <button type="submit" style={{ padding: '12px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', marginTop: '10px' }}>
+                    🔒 Consolidar y Guardar Cierre de Caja
+                  </button>
+                </form>
+              </div>
+
+              <div style={{ backgroundColor: '#fafafa', padding: '20px', borderRadius: '8px', border: '1px solid #ddd', display: 'flex', flexDirection: 'column', maxHeight: '400px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', color: '#333' }}>📜 Historial de Cierres Anteriores</h3>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input 
+                      type="date" 
+                      value={filtroFechaHistorial} 
+                      onChange={(e) => setFiltroFechaHistorial(e.target.value)} 
+                      style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }} 
+                    />
+                    {filtroFechaHistorial && (
+                      <button 
+                        onClick={() => setFiltroFechaHistorial('')} 
+                        style={{ padding: '4px 8px', backgroundColor: '#eee', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  {historialCierresFiltrados.length > 0 ? (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid #ddd', color: '#666', position: 'sticky', top: 0, backgroundColor: '#fafafa' }}>
+                          <th style={{ padding: '6px' }}>Fecha</th>
+                          <th style={{ padding: '6px' }}>Sistema</th>
+                          <th style={{ padding: '6px' }}>Contado</th>
+                          <th style={{ padding: '6px' }}>Dif.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historialCierresFiltrados.map(c => (
+                          <tr key={c.id} style={{ borderBottom: '1px solid #eee' }}>
+                            <td style={{ padding: '6px' }}>{c.fecha_cierre ? c.fecha_cierre.replace('T', ' ').slice(0, 16) : ''}</td>
+                            <td style={{ padding: '6px' }}>${parseFloat(c.gran_total_sistema).toFixed(2)}</td>
+                            <td style={{ padding: '6px' }}>${parseFloat(c.efectivo_contado).toFixed(2)}</td>
+                            <td style={{ padding: '6px', fontWeight: 'bold', color: parseFloat(c.diferencia) === 0 ? '#2e7d32' : '#c62828' }}>${parseFloat(c.diferencia).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p style={{ color: '#666', fontStyle: 'italic', fontSize: '13px', textAlign: 'center', marginTop: '20px' }}>No hay cierres de caja registrados para esta fecha.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* PESTAÑA: PROVEEDORES & ÓRDENES */}
         {pestañaActiva === 'proveedores' && (
           <div className="no-print" style={{ backgroundColor: '#fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
@@ -760,8 +1160,9 @@ function AdminPanel({
                     <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd' }}>ID Orden</th>
                     <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd' }}>Proveedor</th>
                     <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd' }}>Detalles / Items</th>
-                    <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd' }}>Total Estimado</th>
+                    <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd' }}>Total / Saldo</th>
                     <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd' }}>Estado</th>
+                    <th style={{ padding: '10px 15px', borderBottom: '2px solid #ddd', textAlign: 'center' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -770,10 +1171,26 @@ function AdminPanel({
                       <td style={{ padding: '10px 15px', fontWeight: 'bold' }}>#{ord.id}</td>
                       <td style={{ padding: '10px 15px', fontWeight: 'bold' }}>{ord.proveedor}</td>
                       <td style={{ padding: '10px 15px', color: '#555' }}>{ord.detalles_items}</td>
-                      <td style={{ padding: '10px 15px', fontWeight: 'bold', color: '#2e7d32' }}>${parseFloat(ord.total_estimado).toFixed(2)}</td>
-                      <td style={{ padding: '10px 15px' }}><span style={{ backgroundColor: '#fff3e0', color: '#e65100', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>{ord.estado}</span></td>
+                      <td style={{ padding: '10px 15px' }}>
+                        <div style={{ fontWeight: 'bold', color: '#2e7d32' }}>Total: ${parseFloat(ord.total_estimado).toFixed(2)}</div>
+                        <div style={{ fontSize: '11px', color: '#c62828', fontWeight: 'bold' }}>Saldo: ${parseFloat(ord.saldo_pendiente ?? ord.total_estimado).toFixed(2)}</div>
+                      </td>
+                      <td style={{ padding: '10px 15px' }}><span style={{ backgroundColor: ord.estado === 'Pagado' ? '#e8f5e9' : '#fff3e0', color: ord.estado === 'Pagado' ? '#2e7d32' : '#e65100', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>{ord.estado}</span></td>
+                      <td style={{ padding: '10px 15px', textAlign: 'center', display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                        <button onClick={() => {
+                          setOrdenAEditar(ord);
+                          setModalEditarOrdenAbierto(true);
+                        }} style={{ backgroundColor: '#0288d1', color: '#fff', border: 'none', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }} title="Editar orden">✏️</button>
+                        
+                        <button onClick={() => {
+                          setOrdenSeleccionadaAbono(ord);
+                          setModalAbonoProveedorAbierto(true);
+                        }} style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }} title="Abonar con Cheque o Transferencia">💵 Abonar</button>
+
+                        <button onClick={() => verHistorialAbonos(ord)} style={{ backgroundColor: '#6c757d', color: '#fff', border: 'none', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }} title="Ver historial de abonos">📜</button>
+                      </td>
                     </tr>
-                  )) : <tr><td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>No hay órdenes de compra registradas.</td></tr>}
+                  )) : <tr><td colSpan="6" style={{ padding: '30px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>No hay órdenes de compra registradas.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -837,7 +1254,7 @@ function AdminPanel({
 
       </div>
 
-      {/* MODAL: NUEVO PROVEEDOR */}
+      {/* MODALES RESTANTES */}
       {modalProveedorAbierto && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '450px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
@@ -862,7 +1279,6 @@ function AdminPanel({
         </div>
       )}
 
-      {/* MODAL: NUEVA ORDEN DE COMPRA */}
       {modalOrdenAbierto && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '450px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
@@ -873,13 +1289,10 @@ function AdminPanel({
                 <option value="">-- Elige un proveedor --</option>
                 {listaProveedores.map(p => <option key={p.id} value={p.id}>{p.nombre_empresa}</option>)}
               </select>
-
               <label style={estiloLabel}>Total Estimado ($)</label>
               <input type="number" step="0.01" required value={nuevaOrden.total_estimado} onChange={(e) => setNuevaOrden({...nuevaOrden, total_estimado: e.target.value})} placeholder="0.00" style={estiloInput} />
-
               <label style={estiloLabel}>Detalles / Artículos solicitados</label>
-              <textarea required value={nuevaOrden.detalles_items} onChange={(e) => setNuevaOrden({...nuevaOrden, detalles_items: e.target.value})} placeholder="Ej. 10 galones de pintura, 5 sacos de cemento..." style={{ ...estiloInput, minHeight: '80px' }} />
-
+              <textarea required value={nuevaOrden.detalles_items} onChange={(e) => setNuevaOrden({...nuevaOrden, detalles_items: e.target.value})} placeholder="Ej. 10 galones de pintura..." style={{ ...estiloInput, minHeight: '80px' }} />
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#2e7d32', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Emitir Orden</button>
                 <button type="button" onClick={() => setModalOrdenAbierto(false)} style={{ padding: '10px', backgroundColor: '#ccc', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
@@ -889,7 +1302,99 @@ function AdminPanel({
         </div>
       )}
 
-      {/* MODAL: NUEVO CRÉDITO */}
+      {/* MODAL EDITAR ORDEN DE COMPRA */}
+      {modalEditarOrdenAbierto && ordenAEditar && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '450px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>✏️ Editar Orden de Compra #{ordenAEditar.id}</h3>
+            <form onSubmit={guardarEdicionOrden} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <label style={estiloLabel}>Total Estimado ($)</label>
+              <input type="number" step="0.01" required value={ordenAEditar.total_estimado} onChange={(e) => setOrdenAEditar({...ordenAEditar, total_estimado: e.target.value})} style={estiloInput} />
+              
+              <label style={estiloLabel}>Detalles / Items</label>
+              <textarea required value={ordenAEditar.detalles_items} onChange={(e) => setOrdenAEditar({...ordenAEditar, detalles_items: e.target.value})} style={{ ...estiloInput, minHeight: '80px' }} />
+              
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                <button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#0288d1', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Guardar Cambios</button>
+                <button type="button" onClick={() => setModalEditarOrdenAbierto(false)} style={{ padding: '10px', backgroundColor: '#ccc', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ABONO A PROVEEDOR (TRANSFERENCIA O CHEQUE) */}
+      {modalAbonoProveedorAbierto && ordenSeleccionadaAbono && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '420px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>💵 Abonar a Proveedor ({ordenSeleccionadaAbono.proveedor})</h3>
+            <p style={{ fontSize: '13px', color: '#555', margin: '0 0 15px 0' }}>
+              Orden ID: <strong>#{ordenSeleccionadaAbono.id}</strong><br/>
+              Saldo Pendiente: <strong style={{ color: '#c62828' }}>${parseFloat(ordenSeleccionadaAbono.saldo_pendiente ?? ordenSeleccionadaAbono.total_estimado).toFixed(2)}</strong>
+            </p>
+            <form onSubmit={registrarAbonoProveedor} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <label style={estiloLabel}>Monto a Abonar ($)</label>
+              <input type="number" step="0.01" required value={datosAbonoProv.monto} onChange={(e) => setDatosAbonoProv({...datosAbonoProv, monto: e.target.value})} placeholder="0.00" style={estiloInput} />
+              
+              <label style={estiloLabel}>Forma de Pago</label>
+              <select value={datosAbonoProv.tipo_pago} onChange={(e) => setDatosAbonoProv({...datosAbonoProv, tipo_pago: e.target.value})} style={estiloInput}>
+                <option value="Transferencia">Transferencia Bancaria</option>
+                <option value="Cheque">Cheque</option>
+              </select>
+
+              <label style={estiloLabel}>Número de Referencia (Nro. Transferencia o Cheque)</label>
+              <input type="text" required value={datosAbonoProv.referencia} onChange={(e) => setDatosAbonoProv({...datosAbonoProv, referencia: e.target.value})} placeholder="Ej. CHQ-98765 o TRF-12345" style={estiloInput} />
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                <button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#2e7d32', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Registrar Abono</button>
+                <button type="button" onClick={() => setModalAbonoProveedorAbierto(false)} style={{ padding: '10px', backgroundColor: '#ccc', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTORIAL DE ABONOS A PROVEEDOR */}
+      {modalHistorialAbonosAbierto && ordenSeleccionadaHistorial && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '500px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', maxHeight: '85vh', overflowY: 'auto' }}>
+            <h3 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>📜 Historial de Abonos - Orden #{ordenSeleccionadaHistorial.id}</h3>
+            <p style={{ fontSize: '13px', color: '#555', margin: '0 0 15px 0' }}>
+              Proveedor: <strong>{ordenSeleccionadaHistorial.proveedor}</strong><br/>
+              Total Orden: <strong>${parseFloat(ordenSeleccionadaHistorial.total_estimado).toFixed(2)}</strong> | 
+              Saldo Pendiente: <strong style={{ color: '#c62828' }}>${parseFloat(ordenSeleccionadaHistorial.saldo_pendiente ?? ordenSeleccionadaHistorial.total_estimado).toFixed(2)}</strong>
+            </p>
+
+            {listaAbonosOrden.length > 0 ? (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', marginBottom: '20px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f4f6f8', borderBottom: '2px solid #ddd' }}>
+                    <th style={{ padding: '8px' }}>Fecha</th>
+                    <th style={{ padding: '8px' }}>Método</th>
+                    <th style={{ padding: '8px' }}>Referencia / Nro</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Monto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listaAbonosOrden.map(ab => (
+                    <tr key={ab.id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ padding: '8px' }}>{ab.fecha_abono ? ab.fecha_abono.replace('T', ' ').slice(0, 16) : ''}</td>
+                      <td style={{ padding: '8px', fontWeight: 'bold' }}>{ab.tipo_pago}</td>
+                      <td style={{ padding: '8px', color: '#555' }}>{ab.referencia_banco}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#2e7d32' }}>${parseFloat(ab.monto_abonado).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>No se han registrado abonos para esta orden todavía.</p>
+            )}
+
+            <button onClick={() => setModalHistorialAbonosAbierto(false)} style={{ width: '100%', padding: '10px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
       {modalCreditoAbierto && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '450px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
@@ -912,7 +1417,6 @@ function AdminPanel({
         </div>
       )}
 
-      {/* MODAL: ABONO */}
       {modalAbonoAbierto && cuentaSeleccionada && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', color: '#000', borderRadius: '8px', width: '100%', maxWidth: '400px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
@@ -933,7 +1437,6 @@ function AdminPanel({
         </div>
       )}
 
-      {/* MODAL RECIBO (FORMATO TICKET TÉRMICO 80mm) */}
       {modalImprimirAbierto && ultimaVentaPOS && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <style>{`
@@ -942,46 +1445,25 @@ function AdminPanel({
               body { margin: 0; padding: 0; background: #fff; }
               body * { visibility: hidden; }
               #zona-ticket, #zona-ticket * { visibility: visible; }
-              #zona-ticket { 
-                position: absolute; 
-                left: 0; 
-                top: 0; 
-                width: 72mm; /* Dejamos un margen para la impresora de 80mm */
-                padding: 4mm;
-                margin: 0 auto; 
-                font-family: 'Courier New', Courier, monospace; 
-                font-size: 12px; 
-                color: #000;
-                background: white;
-              }
-              /* Ocultar botones al imprimir */
+              #zona-ticket { position: absolute; left: 0; top: 0; width: 72mm; padding: 4mm; margin: 0 auto; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; background: white; }
               .no-imprimir-ticket { display: none !important; }
             }
           `}</style>
-          
           <div style={{ backgroundColor: '#fff', borderRadius: '8px', width: '100%', maxWidth: '380px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            
-            {/* AREA DEL TICKET */}
             <div id="zona-ticket" style={{ padding: '20px', flex: 1, overflowY: 'auto', fontFamily: "'Courier New', Courier, monospace", fontSize: '13px', color: '#000', backgroundColor: '#fff' }}>
-              
               <div style={{ textAlign: 'center', marginBottom: '10px' }}>
                 <h2 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 'bold' }}>FERRETERÍA L E</h2>
                 <p style={{ margin: '2px 0', fontSize: '12px' }}>RUC: 0992837465001</p>
                 <p style={{ margin: '2px 0', fontSize: '12px' }}>Batallón del Suburbio - Guayaquil</p>
-                <p style={{ margin: '2px 0', fontSize: '12px' }}>Tel: 0987654321</p>
               </div>
-
               <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
-
               <div style={{ marginBottom: '10px', fontSize: '12px' }}>
                 <p style={{ margin: '2px 0' }}><strong>Fecha:</strong> {ultimaVentaPOS.fecha}</p>
                 <p style={{ margin: '2px 0' }}><strong>Cliente:</strong> {ultimaVentaPOS.cliente}</p>
                 <p style={{ margin: '2px 0' }}><strong>C.I/RUC:</strong> {ultimaVentaPOS.cedula}</p>
                 <p style={{ margin: '2px 0' }}><strong>Pago:</strong> {ultimaVentaPOS.metodo}</p>
               </div>
-
               <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
-
               <table style={{ width: '100%', textAlign: 'left', fontSize: '12px', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
@@ -994,44 +1476,31 @@ function AdminPanel({
                   {ultimaVentaPOS.items.map((it, idx) => (
                     <tr key={idx}>
                       <td style={{ paddingTop: '5px', verticalAlign: 'top' }}>{it.cantidad}</td>
-                      <td style={{ paddingTop: '5px' }}>
-                        {it.nombre}<br/>
-                        <small style={{ color: '#555' }}>${parseFloat(it.precio_venta).toFixed(2)} c/u</small>
-                      </td>
+                      <td style={{ paddingTop: '5px' }}>{it.nombre}<br/><small style={{ color: '#555' }}>${parseFloat(it.precio_venta).toFixed(2)} c/u</small></td>
                       <td style={{ paddingTop: '5px', textAlign: 'right', verticalAlign: 'top' }}>${(it.precio_venta * it.cantidad).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-
               <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
-
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 'bold', margin: '10px 0' }}>
                 <span>TOTAL:</span>
                 <span>${ultimaVentaPOS.total.toFixed(2)}</span>
               </div>
-
               <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
-
               <div style={{ textAlign: 'center', fontSize: '11px', marginTop: '15px' }}>
                 <p style={{ margin: '2px 0' }}>¡Gracias por su compra!</p>
-                <p style={{ margin: '2px 0' }}>Revise su mercadería antes de salir.</p>
                 <p style={{ margin: '2px 0' }}>* Documento sin validez tributaria *</p>
               </div>
-
             </div>
-
-            {/* BOTONES (No se imprimen) */}
             <div className="no-imprimir-ticket" style={{ display: 'flex', gap: '10px', padding: '15px', backgroundColor: '#f0f0f0', borderTop: '1px solid #ccc' }}>
               <button onClick={() => setModalImprimirAbierto(false)} style={{ flex: 1, padding: '10px', backgroundColor: '#fff', border: '1px solid #aaa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Cerrar</button>
               <button onClick={imprimirRecibo} style={{ flex: 2, padding: '10px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🖨️ Imprimir Ticket</button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* MODAL DASHBOARD REPORTES */}
       {detalleDashboard && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#101e2e', color: '#fff', borderRadius: '8px', width: '100%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', border: '1px solid #1a2f44', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>

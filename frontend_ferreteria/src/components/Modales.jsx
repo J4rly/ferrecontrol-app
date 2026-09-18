@@ -13,7 +13,7 @@ export function ModalAuth({ modalAuthAbierto, setModalAuthAbierto, modoRegistro,
         <form onSubmit={gestionarLoginRegistro} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           {modoRegistro && (
             <>
-              <input name="nombre_completo" placeholder="Nombre completo" value={formAuth.nombre_completo} onChange={manejarCambioAuth} required style={estiloInput} />
+              <input name="nombre_completo" placeholder="1er Nombre y 1er Apellido" value={formAuth.nombre_completo} onChange={manejarCambioAuth} required style={estiloInput} />
               <input name="direccion" placeholder="Dirección de entrega" value={formAuth.direccion} onChange={manejarCambioAuth} required style={estiloInput} />
               <input name="cedula" placeholder="Cédula o RUC" value={formAuth.cedula} onChange={manejarCambioAuth} required style={estiloInput} />
               <input name="whatsapp" placeholder="Número de WhatsApp" value={formAuth.whatsapp} onChange={manejarCambioAuth} required style={estiloInput} />
@@ -263,7 +263,6 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
   const esUrlServidor = clienteSeleccionado.voucher && clienteSeleccionado.voucher.startsWith("http");
   const esPendiente = clienteSeleccionado.metodo_pago && clienteSeleccionado.metodo_pago.includes('Pendiente');
 
-  // Recuperar los artículos para mostrarlos en el ticket
   let itemsTicket = [];
   try {
     if (clienteSeleccionado.carrito) {
@@ -317,7 +316,6 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
       
-      {/* CSS ESPECIAL PARA LA TICKETERA */}
       <style>{`
         @media print {
           @page { margin: 0; size: 80mm auto; }
@@ -339,7 +337,6 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
         }
       `}</style>
 
-      {/* MODAL NORMAL DE VISUALIZACIÓN */}
       <div className="no-imprimir-modal" style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '100%', maxWidth: '450px', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
         <button onClick={() => setClienteSeleccionado(null)} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#666' }}>✖</button>
         
@@ -416,7 +413,6 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
             </div>
           )}
 
-          {/* BOTÓN MAGICO DE IMPRESIÓN */}
           <button 
             onClick={imprimirRecibo}
             style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px', marginTop: '5px' }}
@@ -426,7 +422,6 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
         </div>
       </div>
 
-      {/* ESTE DIV SOLO SE VOLVERÁ VISIBLE CUANDO PRESIONES EL BOTON IMPRIMIR */}
       <div id="ticket-pedido-impresion" style={{ display: 'none' }}>
         <div style={{ textAlign: 'center', marginBottom: '10px' }}>
           <h2 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 'bold' }}>FERRETERÍA L E</h2>
@@ -495,12 +490,12 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
 
 export function ModalMiCuenta({ modalCuentaAbierto, setModalCuentaAbierto, usuarioLogueado, setUsuarioLogueado }) {
   const [formCuenta, setFormCuenta] = useState({
-    nombre_completo: usuarioLogueado?.nombre_completo || '',
-    contrasena: usuarioLogueado?.contrasena || '',
+    contrasena: '',
     direccion: usuarioLogueado?.direccion || '',
-    cedula: usuarioLogueado?.cedula || '',
     whatsapp: usuarioLogueado?.whatsapp || ''
   });
+  
+  const [mostrarPassword, setMostrarPassword] = useState(false);
 
   if (!modalCuentaAbierto || !usuarioLogueado) return null;
 
@@ -510,15 +505,24 @@ export function ModalMiCuenta({ modalCuentaAbierto, setModalCuentaAbierto, usuar
 
   const guardarCambios = (e) => {
     e.preventDefault();
+    
+    const datosAEnviar = {
+      nombre_completo: usuarioLogueado.nombre_completo,
+      cedula: usuarioLogueado.cedula,
+      direccion: formCuenta.direccion,
+      whatsapp: formCuenta.whatsapp,
+      contrasena: formCuenta.contrasena ? formCuenta.contrasena : usuarioLogueado.contrasena
+    };
+
     fetch(`http://127.0.0.1:8000/usuarios/${usuarioLogueado.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formCuenta)
+      body: JSON.stringify(datosAEnviar)
     })
     .then(r => r.json())
     .then(res => {
       if (res.estado === "Éxito") {
-        setUsuarioLogueado({ ...usuarioLogueado, ...formCuenta });
+        setUsuarioLogueado({ ...usuarioLogueado, ...datosAEnviar });
         alert("¡Tus datos de cuenta han sido actualizados con éxito!");
         setModalCuentaAbierto(false);
       } else {
@@ -528,6 +532,7 @@ export function ModalMiCuenta({ modalCuentaAbierto, setModalCuentaAbierto, usuar
   };
 
   const estiloInput = { padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '14px', width: '100%', boxSizing: 'border-box' };
+  const inputBloqueado = { ...estiloInput, backgroundColor: '#f0f0f0', color: '#666', cursor: 'not-allowed' };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
@@ -538,28 +543,45 @@ export function ModalMiCuenta({ modalCuentaAbierto, setModalCuentaAbierto, usuar
         
         <form onSubmit={guardarCambios} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '15px' }}>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Nombre Completo:</label>
-            <input name="nombre_completo" value={formCuenta.nombre_completo} onChange={manejarCambio} required style={estiloInput} />
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>1er Nombre y 1er Apellido (No modificable):</label>
+            <input value={usuarioLogueado.nombre_completo} disabled style={inputBloqueado} />
           </div>
 
           <div>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Correo Electrónico (No modificable):</label>
-            <input type="email" value={usuarioLogueado.correo} disabled style={{ ...estiloInput, backgroundColor: '#f0f0f0', color: '#666', cursor: 'not-allowed' }} />
+            <input type="email" value={usuarioLogueado.correo} disabled style={inputBloqueado} />
           </div>
 
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Contraseña:</label>
-            <input type="text" name="contrasena" value={formCuenta.contrasena} onChange={manejarCambio} required style={estiloInput} />
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Cédula / RUC (No modificable):</label>
+            <input value={usuarioLogueado.cedula} disabled style={inputBloqueado} />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Nueva Contraseña (Opcional):</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input 
+                type={mostrarPassword ? "text" : "password"} 
+                name="contrasena" 
+                placeholder="Déjalo en blanco si no deseas cambiarla" 
+                value={formCuenta.contrasena} 
+                onChange={manejarCambio} 
+                style={{ ...estiloInput, paddingRight: '40px' }} 
+              />
+              <button 
+                type="button" 
+                onClick={() => setMostrarPassword(!mostrarPassword)}
+                style={{ position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
+                title={mostrarPassword ? "Ocultar contraseña" : "Ver contraseña"}
+              >
+                {mostrarPassword ? "👁️‍🗨️" : "👁️"}
+              </button>
+            </div>
           </div>
 
           <div>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Dirección de Entrega:</label>
             <input name="direccion" value={formCuenta.direccion} onChange={manejarCambio} required style={estiloInput} />
-          </div>
-
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>Cédula / RUC:</label>
-            <input name="cedula" value={formCuenta.cedula} onChange={manejarCambio} required style={estiloInput} />
           </div>
 
           <div>
