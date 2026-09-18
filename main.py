@@ -83,6 +83,9 @@ class UsuarioActualizar(BaseModel):
     cedula: str
     whatsapp: str
 
+class UsuarioRolActualizar(BaseModel):
+    rol: str
+
 class LogAuditoria(BaseModel):
     accion: str
     detalles: str
@@ -129,7 +132,7 @@ class OrdenActualizar(BaseModel):
 class AbonoProveedorNuevo(BaseModel):
     orden_id: int
     monto_abonado: float
-    tipo_pago: str  # 'Transferencia' o 'Cheque'
+    tipo_pago: str  
     referencia_banco: Optional[str] = "S/N"
 
 
@@ -293,7 +296,7 @@ def obtener_creditos():
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/creditos")
-def crear_cuenta_credito(cuenta: CreditoNuevo):
+def crear_cuenta_credito(cuenta: CreditoNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -304,13 +307,13 @@ def crear_cuenta_credito(cuenta: CreditoNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("NUEVO CRÉDITO", f"Se abrió cuenta fiada para {cuenta.nombre_cliente} con saldo inicial de ${cuenta.saldo_actual:.2f}")
+        registrar_log_interno("NUEVO CRÉDITO", f"Se abrió cuenta fiada para {cuenta.nombre_cliente} con saldo inicial de ${cuenta.saldo_actual:.2f}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/creditos/abonar")
-def registrar_abono(abono: AbonoNuevo):
+def registrar_abono(abono: AbonoNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor(cursor_factory=RealDictCursor)
@@ -348,7 +351,7 @@ def registrar_abono(abono: AbonoNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("ABONO A CRÉDITO", f"Abono de ${abono.monto_abonado:.2f} registrado para {cliente_credito['nombre_cliente']}")
+        registrar_log_interno("ABONO A CRÉDITO", f"Abono de ${abono.monto_abonado:.2f} registrado para {cliente_credito['nombre_cliente']}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -367,7 +370,7 @@ def obtener_proveedores():
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/proveedores")
-def crear_proveedor(prov: ProveedorNuevo):
+def crear_proveedor(prov: ProveedorNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -378,7 +381,7 @@ def crear_proveedor(prov: ProveedorNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("NUEVO PROVEEDOR", f"Se registró al proveedor: {prov.nombre_empresa}")
+        registrar_log_interno("NUEVO PROVEEDOR", f"Se registró al proveedor: {prov.nombre_empresa}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -413,7 +416,7 @@ def obtener_ordenes():
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/ordenes-compra")
-def crear_orden(orden: OrdenCompraNueva):
+def crear_orden(orden: OrdenCompraNueva, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -424,7 +427,7 @@ def crear_orden(orden: OrdenCompraNueva):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("ORDEN DE COMPRA", f"Se generó una orden de compra por ${orden.total_estimado:.2f}")
+        registrar_log_interno("ORDEN DE COMPRA", f"Se generó una orden de compra por ${orden.total_estimado:.2f}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -477,7 +480,7 @@ def obtener_productos():
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/productos")
-def crear_producto(producto: ProductoNuevo):
+def crear_producto(producto: ProductoNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -488,7 +491,7 @@ def crear_producto(producto: ProductoNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("CREACIÓN PRODUCTO", f"Se creó el producto SKU: {producto.sku}")
+        registrar_log_interno("CREACIÓN PRODUCTO", f"Se creó el producto SKU: {producto.sku}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -519,7 +522,7 @@ def dar_o_quitar_like(sku: str, datos: dict):
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/productos/cargar-excel")
-async def cargar_productos_excel(file: UploadFile = File(...)):
+async def cargar_productos_excel(file: UploadFile = File(...), usuario: str = Form("Administrador")):
     try:
         contenido = await file.read()
         
@@ -636,13 +639,13 @@ async def cargar_productos_excel(file: UploadFile = File(...)):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("SINCRONIZACIÓN EXCEL", f"Sincronizados {importados} productos correctamente.")
+        registrar_log_interno("SINCRONIZACIÓN EXCEL", f"Sincronizados {importados} productos correctamente.", usuario)
         return {"estado": "Éxito", "mensaje": f"¡Se sincronizaron {importados} productos con sus categorías correctas!"}
     except Exception as error:
         return {"estado": "Error", "detalle": f"Error al procesar el archivo: {str(error)}"}
             
 @app.put("/productos/{sku}")
-def actualizar_producto(sku: str, producto: ProductoNuevo):
+def actualizar_producto(sku: str, producto: ProductoNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -652,13 +655,13 @@ def actualizar_producto(sku: str, producto: ProductoNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("ACTUALIZACIÓN PRODUCTO", f"SKU: {sku}")
+        registrar_log_interno("ACTUALIZACIÓN PRODUCTO", f"SKU: {sku}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
 
 @app.delete("/productos/{sku}")
-def eliminar_producto(sku: str):
+def eliminar_producto(sku: str, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -666,7 +669,7 @@ def eliminar_producto(sku: str):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("ELIMINACIÓN PRODUCTO", f"SKU: {sku}")
+        registrar_log_interno("ELIMINACIÓN PRODUCTO", f"SKU: {sku}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -677,19 +680,17 @@ def registrar_usuario(usuario: UsuarioRegistro):
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
         
-        # 1. Verificar si el correo ya está registrado
         cursor.execute("SELECT id FROM usuarios WHERE correo = %s", (usuario.correo,))
         if cursor.fetchone(): 
             return {"estado": "Error", "detalle": "El correo electrónico ya está registrado."}
         
-        # 2. Verificar si la cédula ya está registrada
         cursor.execute("SELECT id FROM usuarios WHERE cedula = %s", (usuario.cedula,))
         if cursor.fetchone(): 
             return {"estado": "Error", "detalle": "El número de cédula o RUC ya se encuentra registrado en el sistema."}
         
         hashed_pw = get_password_hash(usuario.contrasena)
         
-        cursor.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, direccion, cedula, whatsapp) VALUES (%s, %s, %s, %s, %s, %s)", 
+        cursor.execute("INSERT INTO usuarios (nombre_completo, correo, contrasena, direccion, cedula, whatsapp, rol) VALUES (%s, %s, %s, %s, %s, %s, 'Cliente')", 
                        (usuario.nombre_completo, usuario.correo, hashed_pw, usuario.direccion, usuario.cedula, usuario.whatsapp))
         conexion.commit()
         cursor.close()
@@ -705,7 +706,7 @@ def login_usuario(usuario: UsuarioLogin):
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor(cursor_factory=RealDictCursor)
         
-        cursor.execute("SELECT * FROM usuarios WHERE correo = %s", (usuario.correo,))
+        cursor.execute("SELECT id, nombre_completo, correo, contrasena, direccion, cedula, whatsapp, COALESCE(rol, 'Cliente') as rol FROM usuarios WHERE correo = %s", (usuario.correo,))
         cliente = cursor.fetchone()
         
         if not cliente:
@@ -724,23 +725,19 @@ def actualizar_usuario(usuario_id: int, usuario: UsuarioActualizar):
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor(cursor_factory=RealDictCursor)
         
-        # 1. Obtener los datos actuales del usuario para no perder información
         cursor.execute("SELECT * FROM usuarios WHERE id = %s", (usuario_id,))
         usuario_actual = cursor.fetchone()
         if not usuario_actual:
             return {"estado": "Error", "detalle": "Usuario no encontrado."}
 
-        # 2. Mantener los valores originales de nombre y cédula para bloquear su modificación por seguridad
         nombre_a_guardar = usuario_actual['nombre_completo']
         cedula_a_guardar = usuario_actual['cedula']
         
-        # 3. Gestionar la contraseña (si viene vacía o es la misma encriptada, se conserva la actual)
         if not usuario.contrasena or usuario.contrasena == usuario_actual['contrasena']:
             hashed_pw = usuario_actual['contrasena']
         else:
             hashed_pw = get_password_hash(usuario.contrasena)
         
-        # 4. Actualizar únicamente los campos permitidos (Dirección, WhatsApp y Contraseña opcional)
         cursor.execute("""
             UPDATE usuarios 
             SET nombre_completo = %s, contrasena = %s, direccion = %s, cedula = %s, whatsapp = %s 
@@ -761,7 +758,35 @@ def actualizar_usuario(usuario_id: int, usuario: UsuarioActualizar):
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
-    
+
+@app.get("/usuarios")
+def obtener_usuarios():
+    try:
+        conexion = psycopg2.connect(**DB_CONFIG)
+        cursor = conexion.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT id, nombre_completo, correo, direccion, cedula, whatsapp, COALESCE(rol, 'Cliente') as rol FROM usuarios ORDER BY id DESC;")
+        usuarios = cursor.fetchall()
+        cursor.close()
+        conexion.close()
+        return {"estado": "Éxito", "usuarios": usuarios}
+    except Exception as error:
+        return {"estado": "Error", "detalle": str(error)}
+
+@app.put("/usuarios/{usuario_id}/rol")
+def actualizar_rol_usuario(usuario_id: int, datos: UsuarioRolActualizar, usuario: str = "Administrador"):
+    try:
+        conexion = psycopg2.connect(**DB_CONFIG)
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE usuarios SET rol = %s WHERE id = %s", (datos.rol, usuario_id))
+        conexion.commit()
+        cursor.close()
+        conexion.close()
+        registrar_log_interno("CAMBIO DE ROL", f"Se actualizó el rol del usuario ID {usuario_id} a '{datos.rol}'", usuario)
+        return {"estado": "Éxito"}
+    except Exception as error:
+        return {"estado": "Error", "detalle": str(error)}
+
+
 @app.post("/pedidos")
 async def crear_pedido(
     nombre_cliente: str = Form(...),
@@ -772,7 +797,8 @@ async def crear_pedido(
     direccion: str = Form(...),
     metodo_pago: str = Form("Efectivo"),
     carrito: str = Form(...),
-    voucher_file: Optional[UploadFile] = File(None)
+    voucher_file: Optional[UploadFile] = File(None),
+    usuario: str = Form("Administrador")
 ):
     try:
         voucher_url = ""
@@ -832,7 +858,7 @@ async def crear_pedido(
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("NUEVA VENTA", f"Pedido registrado (${total_pagado:.2f} - {metodo_pago}) para {nombre_cliente}")
+        registrar_log_interno("NUEVA VENTA", f"Pedido registrado (${total_pagado:.2f} - {metodo_pago}) para {nombre_cliente}", usuario)
         return {"estado": "Éxito"}
     except Exception as error: 
         return {"estado": "Error", "detalle": str(error)}
@@ -869,7 +895,7 @@ def obtener_pedidos_cliente(correo: str):
         return {"estado": "Error", "detalle": str(error)}
 
 @app.put("/pedidos/{pedido_id}/aprobar")
-def aprobar_pedido(pedido_id: int):
+def aprobar_pedido(pedido_id: int, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor(cursor_factory=RealDictCursor)
@@ -903,13 +929,13 @@ def aprobar_pedido(pedido_id: int):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("APROBAR PEDIDO", f"Se validó el pago de {pedido['nombre_cliente']} y se actualizó el inventario.")
+        registrar_log_interno("APROBAR PEDIDO", f"Se validó el pago de {pedido['nombre_cliente']} y se actualizó el inventario.", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
 
 @app.delete("/pedidos/{pedido_id}")
-def eliminar_pedido(pedido_id: int):
+def eliminar_pedido(pedido_id: int, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor(cursor_factory=RealDictCursor)
@@ -923,13 +949,11 @@ def eliminar_pedido(pedido_id: int):
         conexion.close()
         
         if pedido:
-            registrar_log_interno("PEDIDO RECHAZADO", f"Se rechazó y eliminó el pedido #{pedido_id} de {pedido['nombre_cliente']}.")
+            registrar_log_interno("PEDIDO RECHAZADO", f"Se rechazó y eliminó el pedido #{pedido_id} de {pedido['nombre_cliente']}.", usuario)
             
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
-
-# --- ENDPOINTS PARA CIERRE DE CAJA ---
 
 @app.get("/caja/resumen-hoy")
 def obtener_resumen_caja_hoy():
@@ -979,7 +1003,7 @@ def obtener_resumen_caja_hoy():
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/caja/cerrar")
-def registrar_cierre_caja(cierre: CierreCajaNuevo):
+def registrar_cierre_caja(cierre: CierreCajaNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -998,7 +1022,7 @@ def registrar_cierre_caja(cierre: CierreCajaNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("CIERRE DE CAJA", f"Cierre de caja realizado con diferencia de ${cierre.diferencia:.2f}")
+        registrar_log_interno("CIERRE DE CAJA", f"Cierre de caja realizado con diferencia de ${cierre.diferencia:.2f}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -1047,7 +1071,7 @@ def exportar_pedidos_rango(fecha_inicio: str, fecha_fin: str):
         return {"estado": "Error", "detalle": str(error)}
 
 @app.put("/ordenes-compra/{orden_id}")
-def actualizar_orden_compra(orden_id: int, orden: OrdenActualizar):
+def actualizar_orden_compra(orden_id: int, orden: OrdenActualizar, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()
@@ -1059,38 +1083,33 @@ def actualizar_orden_compra(orden_id: int, orden: OrdenActualizar):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("ACTUALIZAR ORDEN", f"Se actualizó la orden de compra #{orden_id} a ${orden.total_estimado:.2f}")
-        return {"estado": "Éxitor"}
+        registrar_log_interno("ACTUALIZAR ORDEN", f"Se actualizó la orden de compra #{orden_id} a ${orden.total_estimado:.2f}", usuario)
+        return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
 
 @app.post("/ordenes-compra/abonar")
-def registrar_abono_proveedor(abono: AbonoProveedorNuevo):
+def registrar_abono_proveedor(abono: AbonoProveedorNuevo, usuario: str = "Administrador"):
     try:
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor(cursor_factory=RealDictCursor)
         
-        # 1. Obtener la orden para conocer su total
         cursor.execute("SELECT id, total_estimado FROM ordenes_compra WHERE id = %s", (abono.orden_id,))
         orden = cursor.fetchone()
         if not orden:
             return {"estado": "Error", "detalle": "Orden de compra no encontrada."}
         
-        # 2. Registrar el abono
         cursor.execute("""
             INSERT INTO abonos_proveedores (orden_id, monto_abonado, tipo_pago, referencia_banco)
             VALUES (%s, %s, %s, %s)
         """, (abono.orden_id, abono.monto_abonado, abono.tipo_pago, abono.referencia_banco))
         
-        # 3. Calcular la suma total de abonos realizados a esta orden
         cursor.execute("SELECT COALESCE(SUM(monto_abonado), 0) as total_abonado FROM abonos_proveedores WHERE orden_id = %s", (abono.orden_id,))
         suma_abonos = cursor.fetchone()['total_abonado']
         
-        # 4. Calcular el nuevo saldo pendiente y determinar el estado exacto
         nuevo_saldo = max(float(orden['total_estimado']) - float(suma_abonos), 0.0)
         nuevo_estado = 'Pagado' if nuevo_saldo <= 0 else 'Pendiente'
         
-        # 5. Actualizar la orden de compra
         cursor.execute("""
             UPDATE ordenes_compra 
             SET saldo_pendiente = %s,
@@ -1101,7 +1120,7 @@ def registrar_abono_proveedor(abono: AbonoProveedorNuevo):
         conexion.commit()
         cursor.close()
         conexion.close()
-        registrar_log_interno("ABONO A PROVEEDOR", f"Abono de ${abono.monto_abonado:.2f} ({abono.tipo_pago}) registrado para la orden #{abono.orden_id}")
+        registrar_log_interno("ABONO A PROVEEDOR", f"Abono de ${abono.monto_abonado:.2f} ({abono.tipo_pago}) registrado para la orden #{abono.orden_id}", usuario)
         return {"estado": "Éxito"}
     except Exception as error:
         return {"estado": "Error", "detalle": str(error)}
@@ -1123,7 +1142,6 @@ def obtener_ordenes():
         """)
         ordenes = cursor.fetchall()
         
-        # Actualizar automáticamente en base al saldo real calculado
         for ord in ordenes:
             saldo_actual = float(ord['saldo_pendiente'])
             estado_real = 'Pagado' if saldo_actual <= 0 else 'Pendiente'

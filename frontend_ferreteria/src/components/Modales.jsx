@@ -274,7 +274,8 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
 
   const aprobarPedidoAdmin = async () => {
     try {
-      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}/aprobar`, {
+      const revisor = clienteSeleccionado.revisor || "Administrador";
+      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}/aprobar?usuario=${encodeURIComponent(revisor)}`, {
         method: 'PUT'
       });
       const datos = await respuesta.json();
@@ -295,7 +296,8 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
     if (!confirmar) return;
 
     try {
-      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}`, {
+      const revisor = clienteSeleccionado.revisor || "Administrador";
+      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}?usuario=${encodeURIComponent(revisor)}`, {
         method: 'DELETE'
       });
       const datos = await respuesta.json();

@@ -19,7 +19,7 @@ function App() {
     return carritoGuardado ? JSON.parse(carritoGuardado) : [];
   })
 
-  // 3. CARGAMOS LA SESIÓN DEL CLIENTE DESDE LA MEMORIA
+  // 3. CARGAMOS LA SESIÓN DEL CLIENTE O EMPLEADO DESDE LA MEMORIA
   const [usuarioLogueado, setUsuarioLogueado] = useState(() => {
     const usuarioGuardado = localStorage.getItem('usuarioFerreteria');
     return usuarioGuardado ? JSON.parse(usuarioGuardado) : null;
@@ -96,7 +96,6 @@ function App() {
   useEffect(() => { 
     cargarProductos();
     
-    // Si la memoria dice que somos admin, cargamos los pedidos al iniciar
     if (localStorage.getItem('esAdminFerreteria') === 'true') {
       cargarPedidosAdmin();
       window.history.replaceState({ tipo: 'admin' }, '', '');
@@ -133,11 +132,14 @@ function App() {
   const gestionarLoginRegistro = (e) => {
     e.preventDefault()
     
-    // Acceso para administrador
+    // Acceso directo por defecto para Administrador maestro
     if (!modoRegistro && formAuth.correo === "admin@ferreteria.com" && formAuth.contrasena === "admin123") {
       setModalAuthAbierto(false);
       setVistaAdmin(true);
-      localStorage.setItem('esAdminFerreteria', 'true'); // GUARDAR EN MEMORIA
+      localStorage.setItem('esAdminFerreteria', 'true');
+      const adminDefault = { id: 0, nombre_completo: "Administrador Maestro", correo: "admin@ferreteria.com", rol: "Administrador" };
+      setUsuarioLogueado(adminDefault);
+      localStorage.setItem('usuarioFerreteria', JSON.stringify(adminDefault));
       setFormAuth({ nombre_completo: '', correo: '', contrasena: '', direccion: '', cedula: '', whatsapp: '' });
       cargarPedidosAdmin();
       window.history.pushState({ tipo: 'admin' }, '', '');
@@ -149,12 +151,24 @@ function App() {
     fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formAuth) })
     .then(r => r.json()).then(datos => {
       if (datos.estado === "Éxito") {
-        if (modoRegistro) { alert("¡Registro exitoso! Ahora inicia sesión."); setModoRegistro(false); } 
-        else { 
+        if (modoRegistro) { 
+          alert("¡Registro exitoso! Ahora inicia sesión."); 
+          setModoRegistro(false); 
+        } else { 
           setUsuarioLogueado(datos.usuario); 
-          localStorage.setItem('usuarioFerreteria', JSON.stringify(datos.usuario)); // GUARDAR EN MEMORIA
+          localStorage.setItem('usuarioFerreteria', JSON.stringify(datos.usuario)); 
           setModalAuthAbierto(false); 
-          alert(`¡Bienvenido, ${datos.usuario.nombre_completo}!`); 
+
+          // VALIDACIÓN DE ROL AL INICIAR SESIÓN (ADMINISTRADOR O CAJERO)
+          if (datos.usuario.rol === 'Administrador' || datos.usuario.rol === 'Cajero') {
+            setVistaAdmin(true);
+            localStorage.setItem('esAdminFerreteria', 'true');
+            cargarPedidosAdmin();
+            window.history.pushState({ tipo: 'admin' }, '', '');
+            alert(`¡Bienvenido al sistema, ${datos.usuario.nombre_completo} (${datos.usuario.rol})!`);
+          } else {
+            alert(`¡Bienvenido, ${datos.usuario.nombre_completo}!`);
+          }
         }
         setFormAuth({ nombre_completo: '', correo: '', contrasena: '', direccion: '', cedula: '', whatsapp: '' })
       } else alert(datos.detalle || "Error.")
@@ -164,8 +178,8 @@ function App() {
   const cerrarSesion = () => { 
     setUsuarioLogueado(null); 
     setVistaAdmin(false);
-    localStorage.removeItem('usuarioFerreteria'); // BORRAR DE MEMORIA
-    localStorage.removeItem('esAdminFerreteria'); // BORRAR DE MEMORIA
+    localStorage.removeItem('usuarioFerreteria'); 
+    localStorage.removeItem('esAdminFerreteria'); 
     window.history.pushState({ tipo: 'inicio' }, '', '');
     alert("Sesión cerrada."); 
   }
@@ -183,7 +197,7 @@ function App() {
     e.preventDefault()
     const usuarioActualizado = { ...usuarioLogueado, ...datosFactura }
     setUsuarioLogueado(usuarioActualizado)
-    localStorage.setItem('usuarioFerreteria', JSON.stringify(usuarioActualizado)); // GUARDAR ACTUALIZACIÓN
+    localStorage.setItem('usuarioFerreteria', JSON.stringify(usuarioActualizado));
     setModalFacturaAbierto(false);
     setModalPagoAbierto(true); 
   }
@@ -216,7 +230,6 @@ function App() {
     formData.append("direccion", dir);
     formData.append("metodo_pago", metodoPagoNombre);
     
-    // CORREGIDO: Se envía correctamente el sku y la cantidad del carrito
     formData.append("carrito", JSON.stringify(carrito.map(item => ({ sku: item.sku, nombre: item.nombre, precio_venta: item.precio_venta, cantidad: item.cantidad }))));
     
     if (archivoVoucherObj) {
@@ -239,8 +252,8 @@ function App() {
           total_pagado: totalCarrito,
           carrito: [...carrito]
         });
-        setCarrito([]); // Se vacía el carrito
-        cargarProductos(); // RECARGA AUTOMÁTICA DEL STOCK EN TIEMPO REAL
+        setCarrito([]); 
+        cargarProductos(); 
         setModalReciboAbierto(true); 
       } else alert("Error al procesar el pedido: " + (datos.detalle || ""));
     })
@@ -250,7 +263,13 @@ function App() {
     e.preventDefault()
     if (claveAdmin === PASSWORD_SECRETA) {
       setVistaAdmin(true); 
-      localStorage.setItem('esAdminFerreteria', 'true'); // GUARDAR EN MEMORIA
+      localStorage.setItem('esAdminFerreteria', 'true'); 
+
+      // CORRECCIÓN: Fuerza la sesión a Administrador Maestro para evitar que clientes usen el panel
+      const adminDefault = { id: 0, nombre_completo: "Administrador Maestro", correo: "admin@ferreteria.com", rol: "Administrador" };
+      setUsuarioLogueado(adminDefault);
+      localStorage.setItem('usuarioFerreteria', JSON.stringify(adminDefault));
+
       setModalAdminAbierto(false); 
       setClaveAdmin(''); 
       cargarPedidosAdmin();
@@ -260,7 +279,7 @@ function App() {
 
   const irAInicio = () => { 
     setVistaAdmin(false); 
-    localStorage.removeItem('esAdminFerreteria'); // Si va a inicio, sale de admin
+    localStorage.removeItem('esAdminFerreteria'); 
     setCategoriaActiva('Todas las categorías'); 
     setOfertaActiva(null); 
     setViendoFavoritos(false); 
@@ -324,7 +343,6 @@ function App() {
 
   const manejarCambio = (e) => setNuevoProducto({ ...nuevoProducto, [e.target.name]: e.target.name === 'id_categoria' ? parseInt(e.target.value) : e.target.value })
   
-  // FUNCIÓN GUARDAR PRODUCTO OPTIMIZADA (SOPORTA COMAS Y PUNTOS DECIMALES)
   const guardarProducto = (e) => {
     e.preventDefault()
     
@@ -514,21 +532,33 @@ function App() {
       <ModalMiCuenta modalCuentaAbierto={modalCuentaAbierto} setModalCuentaAbierto={setModalCuentaAbierto} usuarioLogueado={usuarioLogueado} setUsuarioLogueado={setUsuarioLogueado} />
       <ModalMisCompras modalComprasAbierto={modalComprasAbierto} setModalComprasAbierto={setModalComprasAbierto} usuarioLogueado={usuarioLogueado} />
 
-      {/* RUTA PROTEGIDA DE ADMINISTRADOR */}
+      {/* RUTA PROTEGIDA ESTRICTA PARA ADMINISTRADOR O CAJERO */}
       {vistaAdmin ? (
-        localStorage.getItem('esAdminFerreteria') === 'true' ? (
-          <AdminPanel irAInicio={irAInicio} pedidosAdmin={pedidosAdmin} setClienteSeleccionado={setClienteSeleccionado} editando={editando} setEditando={setEditando} nuevoProducto={nuevoProducto} estadoInicial={estadoInicial} setNuevoProducto={setNuevoProducto} manejarCambio={manejarCambio} guardarProducto={guardarProducto} productos={productos} prepararEdicion={prepararEdicion} eliminarProducto={eliminarProducto} departamentos={departamentos} />
+        (usuarioLogueado && (usuarioLogueado.rol === 'Administrador' || usuarioLogueado.rol === 'Cajero')) ? (
+          <AdminPanel usuarioActual={usuarioLogueado} irAInicio={irAInicio} pedidosAdmin={pedidosAdmin} setClienteSeleccionado={setClienteSeleccionado} editando={editando} setEditando={setEditando} nuevoProducto={nuevoProducto} estadoInicial={estadoInicial} setNuevoProducto={setNuevoProducto} manejarCambio={manejarCambio} guardarProducto={guardarProducto} productos={productos} prepararEdicion={prepararEdicion} eliminarProducto={eliminarProducto} departamentos={departamentos} />
         ) : (
           <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'Arial' }}>
             <h2>⚠️ Acceso Denegado</h2>
-            <p>No tienes los permisos de seguridad necesarios para ver esta sección.</p>
-            <button onClick={irAInicio} style={{ padding: '10px 20px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Volver al Inicio</button>
+            <p>Tu cuenta actual ({usuarioLogueado?.rol || 'Desconocido'}) no tiene los permisos de seguridad necesarios para entrar al sistema de caja o administración.</p>
+            <button onClick={irAInicio} style={{ padding: '10px 20px', backgroundColor: '#000', color: '#fcee21', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Volver a la Tienda</button>
           </div>
         )
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           
-          <Header irAInicio={irAInicio} busqueda={busqueda} setBusqueda={setBusqueda} setCategoriaActiva={setCategoriaActiva} setOfertaActiva={setOfertaActiva} usuarioLogueado={usuarioLogueado} cerrarSesion={cerrarSesion} setModalAuthAbierto={setModalAuthAbierto} setModalAdminAbierto={setModalAdminAbierto} setModalCuentaAbierto={setModalCuentaAbierto} setModalComprasAbierto={setModalComprasAbierto} setModalCarritoAbierto={setModalCarritoAbierto} carrito={carrito} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} seleccionarFavoritos={seleccionarFavoritos} departamentos={departamentos} />
+          <Header usuarioLogueado={usuarioLogueado} setVistaAdmin={setVistaAdmin} irAInicio={irAInicio} busqueda={busqueda} setBusqueda={setBusqueda} setCategoriaActiva={setCategoriaActiva} setOfertaActiva={setOfertaActiva} cerrarSesion={cerrarSesion} setModalAuthAbierto={setModalAuthAbierto} setModalAdminAbierto={setModalAdminAbierto} setModalCuentaAbierto={setModalCuentaAbierto} setModalComprasAbierto={setModalComprasAbierto} setModalCarritoAbierto={setModalCarritoAbierto} carrito={carrito} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} seleccionarFavoritos={seleccionarFavoritos} departamentos={departamentos} />
+
+          {/* BOTÓN RÁPIDO PARA ACCEDER AL PANEL SI YA ESTÁS LOGUEADO COMO ADMIN O CAJERO */}
+          {usuarioLogueado && (usuarioLogueado.rol === 'Administrador' || usuarioLogueado.rol === 'Cajero') && (
+            <div style={{ backgroundColor: '#fcee21', padding: '8px 5%', display: 'flex', justifyContent: 'flex-end', borderBottom: '1px solid #ddd' }}>
+              <button 
+                onClick={() => { setVistaAdmin(true); window.history.pushState({ tipo: 'admin' }, '', ''); }}
+                style={{ backgroundColor: '#000', color: '#fcee21', border: 'none', padding: '6px 14px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}
+              >
+                ⚙️ Entrar al Panel de {usuarioLogueado.rol}
+              </button>
+            </div>
+          )}
 
           {mostrarInicio && <div onDoubleClick={() => setModalAdminAbierto(true)}><SeccionInicio departamentos={departamentos} seleccionarCategoria={seleccionarCategoria} seleccionarOferta={seleccionarOferta} /></div>}
 

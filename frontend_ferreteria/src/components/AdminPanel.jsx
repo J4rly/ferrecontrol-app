@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts';
 
 function AdminPanel({
+  usuarioActual,
   irAInicio, pedidosAdmin, setClienteSeleccionado, editando, setEditando, nuevoProducto,
   estadoInicial, setNuevoProducto, manejarCambio, guardarProducto, productos,
   prepararEdicion, eliminarProducto, departamentos
@@ -9,9 +10,51 @@ function AdminPanel({
   const estiloInput = { padding: '6px 10px', borderRadius: '2px', border: '1px solid #aaa', fontSize: '13px', width: '100%', boxSizing: 'border-box' };
   const estiloLabel = { fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '2px', display: 'block' };
 
-  const [pestañaActiva, setPestañaActiva] = useState('dashboard'); 
+  // VALIDACIÓN DE ROL MÁS ESTRICTA
+  const rolUsuario = usuarioActual ? usuarioActual.rol : 'Administrador';
+  const esAdmin = rolUsuario === 'Administrador';
+  
+  // NOMBRE PARA LOS LOGS DE AUDITORÍA
+  const nombreUsuarioLogueado = usuarioActual ? usuarioActual.nombre_completo : 'Administrador';
+
+  const [pestañaActiva, setPestañaActiva] = useState(esAdmin ? 'dashboard' : 'pos'); 
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [detalleDashboard, setDetalleDashboard] = useState(null); 
+
+  // RESTRICCIÓN PARA CAJEROS
+  useEffect(() => {
+    if (!esAdmin && (pestañaActiva === 'dashboard' || pestañaActiva === 'inventario' || pestañaActiva === 'proveedores' || pestañaActiva === 'auditoria' || pestañaActiva === 'ajustes' || pestañaActiva === 'empleados')) {
+      setPestañaActiva('pos');
+    }
+  }, [esAdmin, pestañaActiva]);
+
+  // ESTADOS PARA EMPLEADOS / ROLES
+  const [listaEmpleados, setListaEmpleados] = useState([]);
+
+  const cargarEmpleados = async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/usuarios');
+      const data = await res.json();
+      if (data.estado === 'Éxito') setListaEmpleados(data.usuarios);
+    } catch (e) { console.error("Error cargando usuarios:", e); }
+  };
+
+  const cambiarRolEmpleado = async (id, nuevoRol) => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/usuarios/${id}/rol?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rol: nuevoRol })
+      });
+      const data = await res.json();
+      if (data.estado === "Éxito") {
+        alert("Rol actualizado exitosamente.");
+        cargarEmpleados();
+      } else {
+        alert("Error al actualizar rol.");
+      }
+    } catch (e) { console.error(e); }
+  };
 
   const [busquedaAdmin, setBusquedaAdmin] = useState('');
   const [filtroDeptoInventario, setFiltroDeptoInventario] = useState('todos');
@@ -125,14 +168,17 @@ function AdminPanel({
   };
 
   useEffect(() => {
-    cargarLogsAuditoria();
+    if(esAdmin) cargarLogsAuditoria();
     cargarCreditos();
-    cargarProveedoresYOrdenes();
-    cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
+    if(esAdmin) cargarProveedoresYOrdenes();
+    if(esAdmin) cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
     if (pestañaActiva === 'caja') {
       cargarResumenCaja();
     }
-  }, [pestañaActiva]);
+    if (pestañaActiva === 'empleados') {
+      cargarEmpleados();
+    }
+  }, [pestañaActiva, esAdmin]);
 
   const [carritoPOS, setCarritoPOS] = useState([]);
   const [busquedaPOS, setBusquedaPOS] = useState('');
@@ -161,10 +207,12 @@ function AdminPanel({
       const dataProd = await resProd.json();
       if(dataProd.estado === "Éxito") setListaProductos(dataProd.catalogo);
 
-      cargarLogsAuditoria();
+      if(esAdmin) {
+        cargarLogsAuditoria();
+        cargarProveedoresYOrdenes();
+        cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
+      }
       cargarCreditos();
-      cargarProveedoresYOrdenes();
-      cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
     } catch (error) { console.error(error); }
   };
 
@@ -173,6 +221,7 @@ function AdminPanel({
     if (!archivo) return;
     const formData = new FormData();
     formData.append("file", archivo);
+    formData.append("usuario", nombreUsuarioLogueado);
 
     try {
         const respuesta = await fetch("http://localhost:8000/productos/cargar-excel", { method: "POST", body: formData });
@@ -187,7 +236,7 @@ function AdminPanel({
   const guardarNuevoCredito = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/creditos', {
+      const respuesta = await fetch(`http://127.0.0.1:8000/creditos?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nuevoCredito)
@@ -206,7 +255,7 @@ function AdminPanel({
     e.preventDefault();
     if (!cuentaSeleccionada || !montoAbono) return;
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/creditos/abonar', {
+      const respuesta = await fetch(`http://127.0.0.1:8000/creditos/abonar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -229,7 +278,7 @@ function AdminPanel({
   const guardarNuevoProveedor = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/proveedores', {
+      const respuesta = await fetch(`http://127.0.0.1:8000/proveedores?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nuevoProveedor)
@@ -247,7 +296,7 @@ function AdminPanel({
   const guardarNuevaOrden = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/ordenes-compra', {
+      const respuesta = await fetch(`http://127.0.0.1:8000/ordenes-compra?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -270,7 +319,7 @@ function AdminPanel({
     e.preventDefault();
     if (!ordenAEditar) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ordenAEditar.id}`, {
+      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ordenAEditar.id}?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -293,7 +342,7 @@ function AdminPanel({
     e.preventDefault();
     if (!ordenSeleccionadaAbono || !datosAbonoProv.monto) return;
     try {
-      const res = await fetch('http://127.0.0.1:8000/ordenes-compra/abonar', {
+      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/abonar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -316,7 +365,6 @@ function AdminPanel({
 
   const verHistorialAbonos = async (ord) => {
     try {
-      // Consultar la orden más fresca para actualizar el saldo pendiente exacto
       const resOrd = await fetch('http://127.0.0.1:8000/ordenes-compra');
       const dataOrd = await resOrd.json();
       if (dataOrd.estado === "Éxito") {
@@ -326,7 +374,6 @@ function AdminPanel({
         setOrdenSeleccionadaHistorial(ord);
       }
 
-      // Consultar los abonos de esta orden
       const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ord.id}/abonos`);
       const data = await res.json();
       if (data.estado === "Éxito") {
@@ -361,7 +408,7 @@ function AdminPanel({
     };
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/caja/cerrar', {
+      const res = await fetch(`http://127.0.0.1:8000/caja/cerrar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosCierre)
@@ -432,7 +479,6 @@ function AdminPanel({
 
   const eliminarDelPOS = (sku) => setCarritoPOS(carritoPOS.filter(item => item.sku !== sku));
 
-  // MANEJO DE CAMBIO Y BÚSQUEDA AUTOMÁTICA SEGURA DE CÉDULA/RUC EN EL POS
   const manejarCambioPOS = async (e) => {
     const { name, value } = e.target;
     setDatosPOS({ ...datosPOS, [name]: value });
@@ -485,6 +531,7 @@ function AdminPanel({
     formData.append("total_pagado", totalPOS);
     formData.append("metodo_pago", metodoFinal);
     formData.append("carrito", JSON.stringify(carritoPOS.map(item => ({ sku: item.sku, cantidad: item.cantidad, nombre: item.nombre, precio_venta: item.precio_venta }))));
+    formData.append("usuario", nombreUsuarioLogueado);
 
     try {
       const respuesta = await fetch('http://127.0.0.1:8000/pedidos', { method: 'POST', body: formData });
@@ -498,9 +545,8 @@ function AdminPanel({
         setDatosPOS({ nombre: '', apellido: '', cedula: '', direccion: '', correo: '', telefono: '' });
         setEsConsumidorFinal(true);
         
-        // ACTUALIZACIÓN AUTOMÁTICA Y SINCRÓNICA DE DATOS Y TENDENCIA
         await recargarDatosEnSegundoPlano();
-        cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
+        if(esAdmin) cargarTendenciaIngresos(fechaInicioTendencia, fechaFinTendencia);
 
         setModalImprimirAbierto(true); 
       } else alert("Error al procesar: " + datos.detalle);
@@ -553,22 +599,28 @@ function AdminPanel({
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: pestañaActiva === 'dashboard' ? '#0b1622' : '#e0e4e8', fontFamily: 'Arial, sans-serif', transition: 'background-color 0.3s' }}>
       
-      {/* SIDEBAR */}
+      {/* SIDEBAR CON CONTROL DE ROLES Y RECARGA AUTOMÁTICA */}
       <div className="no-print" style={{ width: sidebarColapsado ? '70px' : '240px', backgroundColor: '#070d14', color: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.3s ease', borderRight: '1px solid #1a2938' }}>
         <div style={{ padding: '15px', display: 'flex', alignItems: 'center', justifyContent: sidebarColapsado ? 'center' : 'space-between', borderBottom: '1px solid #1a2938' }}>
           {!sidebarColapsado && <img src="/logo.jpeg" alt="Ferretería" style={{ width: '130px', borderRadius: '4px', backgroundColor: '#fcee21', padding: '3px' }} />}
           <button onClick={() => setSidebarColapsado(!sidebarColapsado)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer', padding: 0 }}>☰</button>
         </div>
+
+        <div style={{ padding: '10px 15px', backgroundColor: '#1a2938', borderBottom: '1px solid #000', fontSize: '12px', textAlign: 'center' }}>
+          {!sidebarColapsado && <span>Bienvenido, <strong>{usuarioActual ? usuarioActual.nombre_completo : 'Usuario'}</strong><br/><span style={{color:'#fcee21'}}>{rolUsuario}</span></span>}
+        </div>
+
         <nav style={{ flex: 1, paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <button onClick={() => { setPestañaActiva('dashboard'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('dashboard')}><span style={{ fontSize: '20px' }}>📊</span> {!sidebarColapsado && <span>Dashboard Analítico</span>}</button>
-          <button onClick={() => setPestañaActiva('pos')} style={getBotonSidebarStyle('pos')}><span style={{ fontSize: '20px' }}>🏪</span> {!sidebarColapsado && <span>Facturación POS</span>}</button>
-          <button onClick={() => setPestañaActiva('inventario')} style={getBotonSidebarStyle('inventario')}><span style={{ fontSize: '20px' }}>🗄️</span> {!sidebarColapsado && <span>Inventario</span>}</button>
-          <button onClick={() => setPestañaActiva('pedidos')} style={getBotonSidebarStyle('pedidos')}><span style={{ fontSize: '20px' }}>📦</span> {!sidebarColapsado && <span>Ventas & Pedidos</span>}</button>
-          <button onClick={() => setPestañaActiva('creditos')} style={getBotonSidebarStyle('creditos')}><span style={{ fontSize: '20px' }}>💳</span> {!sidebarColapsado && <span>Créditos & Fiados</span>}</button>
-          <button onClick={() => setPestañaActiva('caja')} style={getBotonSidebarStyle('caja')}><span style={{ fontSize: '20px' }}>🧮</span> {!sidebarColapsado && <span>Cierre de Caja</span>}</button>
-          <button onClick={() => setPestañaActiva('proveedores')} style={getBotonSidebarStyle('proveedores')}><span style={{ fontSize: '20px' }}>🏭</span> {!sidebarColapsado && <span>Proveedores & Órdenes</span>}</button>
-          <button onClick={() => setPestañaActiva('auditoria')} style={getBotonSidebarStyle('auditoria')}><span style={{ fontSize: '20px' }}>🛡️</span> {!sidebarColapsado && <span>Auditoría & Logs</span>}</button>
-          <button onClick={() => setPestañaActiva('ajustes')} style={getBotonSidebarStyle('ajustes')}><span style={{ fontSize: '20px' }}>⚙️</span> {!sidebarColapsado && <span>Carga & Ajustes</span>}</button>
+          {esAdmin && <button onClick={() => { setPestañaActiva('dashboard'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('dashboard')}><span style={{ fontSize: '20px' }}>📊</span> {!sidebarColapsado && <span>Dashboard Analítico</span>}</button>}
+          <button onClick={() => { setPestañaActiva('pos'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('pos')}><span style={{ fontSize: '20px' }}>🏪</span> {!sidebarColapsado && <span>Facturación POS</span>}</button>
+          {esAdmin && <button onClick={() => { setPestañaActiva('inventario'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('inventario')}><span style={{ fontSize: '20px' }}>🗄️</span> {!sidebarColapsado && <span>Inventario</span>}</button>}
+          <button onClick={() => { setPestañaActiva('pedidos'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('pedidos')}><span style={{ fontSize: '20px' }}>📦</span> {!sidebarColapsado && <span>Ventas & Pedidos</span>}</button>
+          <button onClick={() => { setPestañaActiva('creditos'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('creditos')}><span style={{ fontSize: '20px' }}>💳</span> {!sidebarColapsado && <span>Créditos & Fiados</span>}</button>
+          <button onClick={() => { setPestañaActiva('caja'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('caja')}><span style={{ fontSize: '20px' }}>🧮</span> {!sidebarColapsado && <span>Cierre de Caja</span>}</button>
+          {esAdmin && <button onClick={() => { setPestañaActiva('proveedores'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('proveedores')}><span style={{ fontSize: '20px' }}>🏭</span> {!sidebarColapsado && <span>Proveedores & Órdenes</span>}</button>}
+          {esAdmin && <button onClick={() => { setPestañaActiva('auditoria'); recargarDatosEnSegundoPlano(); }} style={getBotonSidebarStyle('auditoria')}><span style={{ fontSize: '20px' }}>🛡️</span> {!sidebarColapsado && <span>Auditoría & Logs</span>}</button>}
+          {esAdmin && <button onClick={() => { setPestañaActiva('empleados'); cargarEmpleados(); }} style={getBotonSidebarStyle('empleados')}><span style={{ fontSize: '20px' }}>👥</span> {!sidebarColapsado && <span>Empleados / Roles</span>}</button>}
+          {esAdmin && <button onClick={() => setPestañaActiva('ajustes')} style={getBotonSidebarStyle('ajustes')}><span style={{ fontSize: '20px' }}>⚙️</span> {!sidebarColapsado && <span>Carga & Ajustes</span>}</button>}
         </nav>
         <div style={{ padding: '15px', borderTop: '1px solid #1a2938' }}>
           <button onClick={irAInicio} style={{ width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#ccc', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: sidebarColapsado ? '0' : '10px' }}><span style={{ fontSize: '18px' }}>🏠</span> {!sidebarColapsado && <span style={{ fontSize: '14px' }}>Ir a la Tienda</span>}</button>
@@ -577,6 +629,53 @@ function AdminPanel({
 
       <div style={{ flex: 1, padding: '20px', overflowY: 'auto', position: 'relative' }}>
         
+        {/* PESTAÑA: EMPLEADOS Y ROLES */}
+        {pestañaActiva === 'empleados' && esAdmin && (
+          <div className="no-print" style={{ backgroundColor: '#fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
+            <div style={{ padding: '15px 20px', borderBottom: '1px solid #eaeaea', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#333', fontSize: '20px' }}>👥 Gestión de Empleados y Permisos</h2>
+                <p style={{ margin: '3px 0 0 0', color: '#666', fontSize: '12px' }}>Administra los roles de acceso al panel para tu equipo.</p>
+              </div>
+              <button onClick={cargarEmpleados} style={{ backgroundColor: '#fcee21', color: '#000', border: '1px solid #000', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>🔄 Refrescar Lista</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead style={{ backgroundColor: '#f4f6f8' }}>
+                  <tr>
+                    <th style={{ padding: '12px 15px', borderBottom: '2px solid #ddd' }}>ID</th>
+                    <th style={{ padding: '12px 15px', borderBottom: '2px solid #ddd' }}>Nombre del Empleado</th>
+                    <th style={{ padding: '12px 15px', borderBottom: '2px solid #ddd' }}>Correo</th>
+                    <th style={{ padding: '12px 15px', borderBottom: '2px solid #ddd' }}>Cédula</th>
+                    <th style={{ padding: '12px 15px', borderBottom: '2px solid #ddd' }}>Rol en el Sistema</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listaEmpleados.map((emp) => (
+                    <tr key={emp.id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>#{emp.id}</td>
+                      <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>{emp.nombre_completo}</td>
+                      <td style={{ padding: '12px 15px', color: '#555' }}>{emp.correo}</td>
+                      <td style={{ padding: '12px 15px' }}>{emp.cedula}</td>
+                      <td style={{ padding: '12px 15px' }}>
+                        <select 
+                          value={emp.rol} 
+                          onChange={(e) => cambiarRolEmpleado(emp.id, e.target.value)}
+                          style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px', backgroundColor: emp.rol === 'Administrador' ? '#e8f5e9' : (emp.rol === 'Cajero' ? '#fff3e0' : '#f3f4f6'), fontWeight: 'bold', cursor: 'pointer' }}
+                        >
+                          <option value="Administrador">Administrador</option>
+                          <option value="Cajero">Cajero</option>
+                          <option value="Cliente">Cliente</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* FACTURACIÓN POS */}
         {pestañaActiva === 'pos' && (
           <div className="no-print" style={{ backgroundColor: '#f0f0f0', border: '2px solid #999', borderRadius: '4px', padding: '10px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)', boxShadow: 'inset 1px 1px 5px rgba(0,0,0,0.1)' }}>
@@ -686,7 +785,7 @@ function AdminPanel({
         )}
 
         {/* PESTAÑA: DASHBOARD */}
-        {pestañaActiva === 'dashboard' && (
+        {pestañaActiva === 'dashboard' && esAdmin && (
           <div className="no-print" style={{ color: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: '#101e2e', padding: '15px 25px', borderRadius: '8px', border: '1px solid #1a2f44' }}>
               <div><h1 style={{ margin: 0, fontSize: '24px', color: '#fcee21', textTransform: 'uppercase', letterSpacing: '1px' }}>Dashboard de Ventas</h1><p style={{ margin: '5px 0 0 0', color: '#8da2b5', fontSize: '13px' }}>El poder de los datos - Ferretería L E</p></div>
@@ -847,7 +946,7 @@ function AdminPanel({
         )}
 
         {/* PESTAÑA: INVENTARIO */}
-        {pestañaActiva === 'inventario' && (
+        {pestañaActiva === 'inventario' && esAdmin && (
           <div className="no-print" style={{ backgroundColor: '#fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
             <div style={{ padding: '15px 20px', borderBottom: '1px solid #eaeaea', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -955,7 +1054,7 @@ function AdminPanel({
                       <td style={{ padding: '10px 15px' }}><div style={{ fontWeight: 'bold', color: '#333' }}>{ped.nombre_cliente}</div></td>
                       <td style={{ padding: '10px 15px' }}><span style={{ backgroundColor: ped.metodo_pago.includes('Pendiente') ? '#fff3e0' : '#e1f5fe', color: ped.metodo_pago.includes('Pendiente') ? '#e65100' : '#0288d1', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>{ped.metodo_pago}</span></td>
                       <td style={{ padding: '10px 15px', fontWeight: 'bold', color: '#008000' }}>${parseFloat(ped.total_pagado).toFixed(2)}</td>
-                      <td style={{ padding: '10px 15px', textAlign: 'center' }}><button onClick={() => setClienteSeleccionado(ped)} style={{ backgroundColor: '#000', color: '#fcee21', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>Ver Detalles</button></td>
+                      <td style={{ padding: '10px 15px', textAlign: 'center' }}><button onClick={() => setClienteSeleccionado({ ...ped, revisor: nombreUsuarioLogueado })} style={{ backgroundColor: '#000', color: '#fcee21', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>Ver Detalles</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1126,7 +1225,7 @@ function AdminPanel({
         )}
 
         {/* PESTAÑA: PROVEEDORES & ÓRDENES */}
-        {pestañaActiva === 'proveedores' && (
+        {pestañaActiva === 'proveedores' && esAdmin && (
           <div className="no-print" style={{ backgroundColor: '#fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
             <div style={{ padding: '15px 20px', borderBottom: '1px solid #eaeaea', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
               <div>
@@ -1198,7 +1297,7 @@ function AdminPanel({
         )}
 
         {/* PESTAÑA: AUDITORÍA */}
-        {pestañaActiva === 'auditoria' && (
+        {pestañaActiva === 'auditoria' && esAdmin && (
           <div className="no-print" style={{ backgroundColor: '#fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
             <div style={{ padding: '15px 20px', borderBottom: '1px solid #eaeaea', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, color: '#333', fontSize: '20px' }}>🛡️ Registro de Auditoría (Logs de Seguridad)</h2>
@@ -1232,7 +1331,7 @@ function AdminPanel({
         )}
 
         {/* PESTAÑA: AJUSTES */}
-        {pestañaActiva === 'ajustes' && (
+        {pestañaActiva === 'ajustes' && esAdmin && (
           <div className="no-print" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div style={{ flex: '1', minWidth: '280px', backgroundColor: '#fff', padding: '20px', borderRadius: '6px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
               <h2 style={{ marginTop: 0, color: '#333', borderBottom: '1px solid #eee', paddingBottom: '10px', fontSize: '18px' }}>{editando ? '✏️ Editar Artículo' : '➕ Crear Artículo Manual'}</h2>
@@ -1566,7 +1665,7 @@ function AdminPanel({
                     })}
                     {detalleDashboard === 'agotados' && productosAgotados.map(p => (<tr key={p.sku} style={{ borderBottom: '1px solid #1a2f44' }}><td style={{ padding: '12px 20px', color: '#8da2b5' }}>{p.sku}</td><td style={{ padding: '12px 20px', fontWeight: 'bold' }}>{p.nombre}</td><td style={{ padding: '12px 20px' }}>${parseFloat(p.precio_venta).toFixed(2)}</td><td style={{ padding: '12px 20px', color: '#ff4b4b', fontWeight: 'bold' }}>0</td></tr>))}
                     {detalleDashboard === 'activos' && productosActivos.map(p => (<tr key={p.sku} style={{ borderBottom: '1px solid #1a2f44' }}><td style={{ padding: '12px 20px', color: '#8da2b5' }}>{p.sku}</td><td style={{ padding: '12px 20px', fontWeight: 'bold' }}>{p.nombre}</td><td style={{ padding: '12px 20px' }}>${parseFloat(p.precio_venta).toFixed(2)}</td><td style={{ padding: '12px 20px', color: '#4caf50', fontWeight: 'bold' }}>{p.stock}</td></tr>))}
-                    {detalleDashboard === 'pedidos' && listaPedidos.map(ped => (<tr key={ped.id} style={{ borderBottom: '1px solid #1a2f44' }}><td style={{ padding: '12px 20px', color: '#8da2b5' }}>#{ped.id}</td><td style={{ padding: '12px 20px', fontWeight: 'bold' }}>{ped.nombre_cliente}</td><td style={{ padding: '12px 20px', color: '#4caf50' }}>${parseFloat(ped.total_pagado).toFixed(2)}</td></tr>))}
+                    {detalleDashboard === 'pedidos' && listaPedidos.map(ped => (<tr key={ped.id} style={{ borderBottom: '1px solid #1a2f44' }}><td style={{ padding: '12px 20px', color: '#8da2b5' }}>#{ped.id}</td><td style={{ padding: '12px 15px', fontWeight: 'bold' }}>{ped.nombre_cliente}</td><td style={{ padding: '12px 20px', color: '#4caf50' }}>${parseFloat(ped.total_pagado).toFixed(2)}</td></tr>))}
                   </tbody>
                 </table>
               )}
