@@ -109,3 +109,151 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* =========================================
+   📱 ADAPTACIÓN PARA CELULARES (RESPONSIVE)
+   ========================================= */
+
+@media screen and (max-width: 768px) {
+  /* 1. Ajuste general de imágenes */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+    object-fit: contain;
+  }
+
+  /* 2. Forzar estructura vertical principal */
+  #root > div {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  /* ==========================================
+     💡 OCULTAR MENÚ LATERAL DE CATEGORÍAS
+     ========================================== */
+  .ocultar-en-movil {
+    display: none !important; 
+  }
+
+  .ocultar-en-movil + div,
+  .ocultar-en-movil ~ div,
+  div[style*="width: calc"],
+  div[style*="width: 75%"],
+  div[style*="width: 70%"] {
+    width: 100% !important;
+    padding: 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ==========================================
+     🛠️ ADMIN: BARRA HORIZONTAL SUPERIOR
+     ========================================== */
+  /* Corregido: Ahora solo afecta a la barra negra del admin (por su ancho), y deja en paz al carrito */
+  div[style*="width: 250px"], 
+  div[style*="width: 260px"], 
+  div[style*="width: 280px"],
+  div[style*="width: 20%"] {
+    width: 100% !important;
+    height: 70px !important;
+    min-height: 70px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    align-items: center !important;
+    padding: 0 10px !important;
+    border-right: none !important;
+    border-bottom: 3px solid #fcee21 !important;
+  }
+
+  div[style*="width: 250px"] img,
+  div[style*="width: 260px"] img {
+     display: none !important;
+  }
+
+  div[style*="width: 250px"] ul,
+  div[style*="width: 250px"] div {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 10px !important;
+    width: max-content !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  div[style*="width: 250px"] button {
+    white-space: nowrap !important;
+    padding: 10px !important;
+    border-bottom: none !important;
+  }
+
+  /* ==========================================
+     VENTANAS Y TABLAS
+     ========================================== */
+  div[style*="position: fixed"]:not(.panel-carrito) > div, 
+  .modal {
+    width: 95% !important;
+    max-width: 95vw !important;
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+    padding: 15px !important;
+  }
+
+  table {
+    display: block !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+  }
+
+  input, select, textarea {
+    font-size: 16px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ==========================================
+     🛡️ PROTECCIÓN ESTRICTA DEL CARRITO 
+     ========================================== */
+  /* Esto obliga al carrito a ocupar toda la altura de la pantalla y no aplastarse jamás */
+  .panel-carrito {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Protege la zona central donde van los productos para que puedas deslizar y editar (botones + y -) */
+  .panel-carrito > div:nth-child(2) {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    display: block !important;
+  }
+  
+  /* Protege la alineación de los productos */
+  .panel-carrito div[style*="justify-content: space-between"] {
+    flex-wrap: nowrap !important;
+    justify-content: space-between !important;
+  }
+
+ /* ==========================================
+     🛒 RESCATE DE LOS BOTONES + Y - EN EL CARRITO
+     ========================================== */
+  /* Forzamos que la cajita tenga el espacio suficiente */
+  .panel-carrito div[style*="border: 2px solid"] {
+    min-width: 110px !important; 
+    justify-content: space-around !important;
+  }
+  
+  /* Protegemos los botones para que su ancho NUNCA sea cero */
+  .panel-carrito div[style*="border: 2px solid"] button {
+    min-width: 30px !important;
+    min-height: 30px !important;
+    flex-shrink: 0 !important; /* Evita el aplastamiento */
+    color: #000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  } 
+
+}

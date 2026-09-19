@@ -11,17 +11,17 @@ export default defineConfig({
       // Redirige al backend solo las peticiones que empiecen con /productos, /login, /usuarios, etc.
       // O puedes apuntar a rutas específicas de tu API de FastAPI:
       '/productos': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://192.168.1.82:8000',
         changeOrigin: true,
         secure: false,
       },
       '/login': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://192.168.1.82:8000',
         changeOrigin: true,
         secure: false,
       },
       '/usuarios': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://192.168.1.82:8000',
         changeOrigin: true,
         secure: false,
       },

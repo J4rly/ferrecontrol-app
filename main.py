@@ -19,7 +19,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"], 
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -808,7 +808,7 @@ async def crear_pedido(
             ruta_destino = os.path.join("uploads", nombre_archivo)
             with open(ruta_destino, "wb") as buffer:
                 buffer.write(await voucher_file.read())
-            voucher_url = f"http://127.0.0.1:8000/uploads/{nombre_archivo}"
+            voucher_url = f"http://192.168.1.82:8000/uploads/{nombre_archivo}"
 
         conexion = psycopg2.connect(**DB_CONFIG)
         cursor = conexion.cursor()

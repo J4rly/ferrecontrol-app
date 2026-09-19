@@ -33,7 +33,7 @@ function AdminPanel({
 
   const cargarEmpleados = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/usuarios');
+      const res = await fetch('http://192.168.1.82:8000/usuarios');
       const data = await res.json();
       if (data.estado === 'Éxito') setListaEmpleados(data.usuarios);
     } catch (e) { console.error("Error cargando usuarios:", e); }
@@ -41,7 +41,7 @@ function AdminPanel({
 
   const cambiarRolEmpleado = async (id, nuevoRol) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/usuarios/${id}/rol?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const res = await fetch(`http://192.168.1.82:8000/usuarios/${id}/rol?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rol: nuevoRol })
@@ -107,7 +107,7 @@ function AdminPanel({
 
   const cargarTendenciaIngresos = async (inicio = '', fin = '') => {
     try {
-      let url = 'http://127.0.0.1:8000/tendencia-ingresos';
+      let url = 'http://192.168.1.82:8000/tendencia-ingresos';
       const params = [];
       if (inicio) params.push(`fecha_inicio=${inicio}`);
       if (fin) params.push(`fecha_fin=${fin}`);
@@ -129,7 +129,7 @@ function AdminPanel({
 
   const cargarLogsAuditoria = async () => {
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/auditoria');
+      const respuesta = await fetch('http://192.168.1.82:8000/auditoria');
       const datos = await respuesta.json();
       if (datos.estado === "Éxito") setListaLogs(datos.logs);
     } catch (error) { console.error(error); }
@@ -137,7 +137,7 @@ function AdminPanel({
 
   const cargarCreditos = async () => {
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/creditos');
+      const respuesta = await fetch('http://192.168.1.82:8000/creditos');
       const datos = await respuesta.json();
       if (datos.estado === "Éxito") setListaCreditos(datos.cuentas);
     } catch (error) { console.error(error); }
@@ -145,11 +145,11 @@ function AdminPanel({
 
   const cargarProveedoresYOrdenes = async () => {
     try {
-      const resProv = await fetch('http://127.0.0.1:8000/proveedores');
+      const resProv = await fetch('http://192.168.1.82:8000/proveedores');
       const dataProv = await resProv.json();
       if (dataProv.estado === "Éxito") setListaProveedores(dataProv.proveedores);
 
-      const resOrd = await fetch('http://127.0.0.1:8000/ordenes-compra');
+      const resOrd = await fetch('http://192.168.1.82:8000/ordenes-compra');
       const dataOrd = await resOrd.json();
       if (dataOrd.estado === "Éxito") setListaOrdenes(dataOrd.ordenes);
     } catch (error) { console.error(error); }
@@ -157,11 +157,11 @@ function AdminPanel({
 
   const cargarResumenCaja = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/caja/resumen-hoy');
+      const res = await fetch('http://192.168.1.82:8000/caja/resumen-hoy');
       const data = await res.json();
       if (data.estado === "Éxito") setResumenCajaHoy(data.resumen);
 
-      const resHist = await fetch('http://127.0.0.1:8000/caja/historial');
+      const resHist = await fetch('http://192.168.1.82:8000/caja/historial');
       const dataHist = await resHist.json();
       if (dataHist.estado === "Éxito") setHistorialCierres(dataHist.cierres);
     } catch (error) { console.error("Error al cargar caja:", error); }
@@ -199,11 +199,11 @@ function AdminPanel({
 
   const recargarDatosEnSegundoPlano = async () => {
     try {
-      const resPed = await fetch('http://127.0.0.1:8000/pedidos');
+      const resPed = await fetch('http://192.168.1.82:8000/pedidos');
       const dataPed = await resPed.json();
       if(dataPed.estado === "Éxito") setListaPedidos(dataPed.pedidos);
 
-      const resProd = await fetch('http://127.0.0.1:8000/productos');
+      const resProd = await fetch('http://192.168.1.82:8000/productos');
       const dataProd = await resProd.json();
       if(dataProd.estado === "Éxito") setListaProductos(dataProd.catalogo);
 
@@ -236,7 +236,7 @@ function AdminPanel({
   const guardarNuevoCredito = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch(`http://127.0.0.1:8000/creditos?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const respuesta = await fetch(`http://192.168.1.82:8000/creditos?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nuevoCredito)
@@ -255,7 +255,7 @@ function AdminPanel({
     e.preventDefault();
     if (!cuentaSeleccionada || !montoAbono) return;
     try {
-      const respuesta = await fetch(`http://127.0.0.1:8000/creditos/abonar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const respuesta = await fetch(`http://192.168.1.82:8000/creditos/abonar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -278,7 +278,7 @@ function AdminPanel({
   const guardarNuevoProveedor = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch(`http://127.0.0.1:8000/proveedores?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const respuesta = await fetch(`http://192.168.1.82:8000/proveedores?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nuevoProveedor)
@@ -296,7 +296,7 @@ function AdminPanel({
   const guardarNuevaOrden = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch(`http://127.0.0.1:8000/ordenes-compra?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const respuesta = await fetch(`http://192.168.1.82:8000/ordenes-compra?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -319,7 +319,7 @@ function AdminPanel({
     e.preventDefault();
     if (!ordenAEditar) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ordenAEditar.id}?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const res = await fetch(`http://192.168.1.82:8000/ordenes-compra/${ordenAEditar.id}?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -342,7 +342,7 @@ function AdminPanel({
     e.preventDefault();
     if (!ordenSeleccionadaAbono || !datosAbonoProv.monto) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/abonar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const res = await fetch(`http://192.168.1.82:8000/ordenes-compra/abonar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -365,7 +365,7 @@ function AdminPanel({
 
   const verHistorialAbonos = async (ord) => {
     try {
-      const resOrd = await fetch('http://127.0.0.1:8000/ordenes-compra');
+      const resOrd = await fetch('http://192.168.1.82:8000/ordenes-compra');
       const dataOrd = await resOrd.json();
       if (dataOrd.estado === "Éxito") {
         const actualizada = dataOrd.ordenes.find(o => o.id === ord.id) || ord;
@@ -374,7 +374,7 @@ function AdminPanel({
         setOrdenSeleccionadaHistorial(ord);
       }
 
-      const res = await fetch(`http://127.0.0.1:8000/ordenes-compra/${ord.id}/abonos`);
+      const res = await fetch(`http://192.168.1.82:8000/ordenes-compra/${ord.id}/abonos`);
       const data = await res.json();
       if (data.estado === "Éxito") {
         setListaAbonosOrden(data.abonos);
@@ -408,7 +408,7 @@ function AdminPanel({
     };
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/caja/cerrar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
+      const res = await fetch(`http://192.168.1.82:8000/caja/cerrar?usuario=${encodeURIComponent(nombreUsuarioLogueado)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosCierre)
@@ -485,7 +485,7 @@ function AdminPanel({
 
     if (name === 'cedula' && (value.length === 10 || value.length === 13)) {
       try {
-        const respuesta = await fetch(`http://127.0.0.1:8000/buscar-cliente/${value}`);
+        const respuesta = await fetch(`http://192.168.1.82:8000/buscar-cliente/${value}`);
         const datos = await respuesta.json();
         
         if (datos.estado === "Éxito") {
@@ -534,7 +534,7 @@ function AdminPanel({
     formData.append("usuario", nombreUsuarioLogueado);
 
     try {
-      const respuesta = await fetch('http://127.0.0.1:8000/pedidos', { method: 'POST', body: formData });
+      const respuesta = await fetch('http://192.168.1.82:8000/pedidos', { method: 'POST', body: formData });
       const datos = await respuesta.json();
       if (datos.estado === "Éxito") {
         setUltimaVentaPOS({
@@ -798,8 +798,8 @@ function AdminPanel({
                 <p style={{ margin: '3px 0 0 0', color: '#8da2b5', fontSize: '12px' }}>Descarga la información oficial del negocio en formato Excel (.xlsx)</p>
               </div>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <button onClick={() => window.open('http://127.0.0.1:8000/exportar/inventario', '_blank')} style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📊 Descargar Inventario</button>
-                <button onClick={() => window.open('http://127.0.0.1:8000/exportar/pedidos', '_blank')} style={{ backgroundColor: '#0288d1', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📈 Historial Completo</button>
+                <button onClick={() => window.open('http://192.168.1.82:8000/exportar/inventario', '_blank')} style={{ backgroundColor: '#2e7d32', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📊 Descargar Inventario</button>
+                <button onClick={() => window.open('http://192.168.1.82:8000/exportar/pedidos', '_blank')} style={{ backgroundColor: '#0288d1', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📈 Historial Completo</button>
               </div>
             </div>
 
@@ -829,7 +829,7 @@ function AdminPanel({
                       alert("Por favor selecciona ambas fechas (inicio y fin).");
                       return;
                     }
-                    window.open(`http://127.0.0.1:8000/exportar/pedidos-rango?fecha_inicio=${inicio}&fecha_fin=${fin}`, '_blank');
+                    window.open(`http://192.168.1.82:8000/exportar/pedidos-rango?fecha_inicio=${inicio}&fecha_fin=${fin}`, '_blank');
                   }}
                   style={{ backgroundColor: '#9c27b0', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
                 >

@@ -275,7 +275,7 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
   const aprobarPedidoAdmin = async () => {
     try {
       const revisor = clienteSeleccionado.revisor || "Administrador";
-      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}/aprobar?usuario=${encodeURIComponent(revisor)}`, {
+      const respuesta = await fetch(`http://192.168.1.82:8000/pedidos/${clienteSeleccionado.id}/aprobar?usuario=${encodeURIComponent(revisor)}`, {
         method: 'PUT'
       });
       const datos = await respuesta.json();
@@ -297,7 +297,7 @@ export function ModalDetallePedido({ clienteSeleccionado, setClienteSeleccionado
 
     try {
       const revisor = clienteSeleccionado.revisor || "Administrador";
-      const respuesta = await fetch(`http://127.0.0.1:8000/pedidos/${clienteSeleccionado.id}?usuario=${encodeURIComponent(revisor)}`, {
+      const respuesta = await fetch(`http://192.168.1.82:8000/pedidos/${clienteSeleccionado.id}?usuario=${encodeURIComponent(revisor)}`, {
         method: 'DELETE'
       });
       const datos = await respuesta.json();
@@ -516,7 +516,7 @@ export function ModalMiCuenta({ modalCuentaAbierto, setModalCuentaAbierto, usuar
       contrasena: formCuenta.contrasena ? formCuenta.contrasena : usuarioLogueado.contrasena
     };
 
-    fetch(`http://127.0.0.1:8000/usuarios/${usuarioLogueado.id}`, {
+    fetch(`http://192.168.1.82:8000/usuarios/${usuarioLogueado.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(datosAEnviar)
@@ -607,7 +607,7 @@ export function ModalMisCompras({ modalComprasAbierto, setModalComprasAbierto, u
   useEffect(() => {
     if (modalComprasAbierto && usuarioLogueado) {
       setCargando(true);
-      fetch(`http://127.0.0.1:8000/pedidos/cliente/${usuarioLogueado.correo}`)
+      fetch(`http://192.168.1.82:8000/pedidos/cliente/${usuarioLogueado.correo}`)
         .then(r => r.json())
         .then(data => {
           if (data.estado === "Éxito") {

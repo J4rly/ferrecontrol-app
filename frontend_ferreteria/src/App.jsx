@@ -74,10 +74,10 @@ function App() {
   ]
 
   const cargarProductos = () => {
-    fetch('http://127.0.0.1:8000/productos').then(r => r.json()).then(d => { if(d.estado === "Éxito") setProductos(d.catalogo) })
+    fetch('http://192.168.1.82:8000/productos').then(r => r.json()).then(d => { if(d.estado === "Éxito") setProductos(d.catalogo) })
   }
   const cargarPedidosAdmin = () => {
-    fetch('http://127.0.0.1:8000/pedidos').then(r => r.json()).then(d => { if(d.estado === "Éxito") setPedidosAdmin(d.pedidos) })
+    fetch('http://192.168.1.82:8000/pedidos').then(r => r.json()).then(d => { if(d.estado === "Éxito") setPedidosAdmin(d.pedidos) })
   }
 
   // EFECTO: GUARDA EL CARRITO AUTOMÁTICAMENTE CADA VEZ QUE CAMBIA
@@ -147,7 +147,7 @@ function App() {
       return;
     }
 
-    const url = modoRegistro ? 'http://127.0.0.1:8000/registro' : 'http://127.0.0.1:8000/login'
+    const url = modoRegistro ? 'http://192.168.1.82:8000/registro' : 'http://192.168.1.82:8000/login'
     fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formAuth) })
     .then(r => r.json()).then(datos => {
       if (datos.estado === "Éxito") {
@@ -236,7 +236,7 @@ function App() {
       formData.append("voucher_file", archivoVoucherObj);
     }
 
-    fetch('http://127.0.0.1:8000/pedidos', { 
+    fetch('http://192.168.1.82:8000/pedidos', { 
       method: 'POST', 
       body: formData 
     })
@@ -323,7 +323,7 @@ function App() {
       })
     );
 
-    fetch(`http://127.0.0.1:8000/productos/${sku}/like`, { 
+    fetch(`http://192.168.1.82:8000/productos/${sku}/like`, { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario_id: usuarioLogueado.id })
@@ -367,7 +367,7 @@ function App() {
       oferta_tipo: nuevoProducto.oferta_tipo || "" 
     }
 
-    const url = editando ? `http://127.0.0.1:8000/productos/${nuevoProducto.sku}` : 'http://127.0.0.1:8000/productos'
+    const url = editando ? `http://192.168.1.82:8000/productos/${nuevoProducto.sku}` : 'http://192.168.1.82:8000/productos'
     
     fetch(url, { 
       method: editando ? 'PUT' : 'POST', 
@@ -392,7 +392,7 @@ function App() {
   }
 
   const prepararEdicion = (producto) => { setNuevoProducto(producto); setEditando(true); }
-  const eliminarProducto = (sku) => { if(window.confirm(`¿Eliminar ${sku}?`)) fetch(`http://127.0.0.1:8000/productos/${sku}`, { method: 'DELETE' }).then(() => cargarProductos()) }
+  const eliminarProducto = (sku) => { if(window.confirm(`¿Eliminar ${sku}?`)) fetch(`http://192.168.1.82:8000/productos/${sku}`, { method: 'DELETE' }).then(() => cargarProductos()) }
 
   const mostrarNotificacion = (mensaje) => {
     setNotificacion({ visible: true, mensaje });
@@ -466,7 +466,7 @@ function App() {
         </div>
       )}
 
-      <div style={{
+      <div className="panel-carrito" style={{
         position: 'fixed', top: 0, right: modalCarritoAbierto ? '0' : '-100%', 
         width: '100%', maxWidth: '400px', height: '100vh', backgroundColor: '#fff', 
         boxShadow: '-5px 0 15px rgba(0,0,0,0.2)', transition: 'right 0.3s ease-in-out', 
@@ -578,9 +578,10 @@ function App() {
             <div style={{ display: 'flex', gap: '40px', alignItems: 'flex-start' }}>
               
               {(!mostrarInicio || viendoFavoritos) && (
-                <div style={{ width: '220px', flexShrink: '0' }}>
+                /* 👇 AQUÍ ESTÁ EL CAMBIO: Agregamos className="ocultar-en-movil" 👇 */
+                <div className="ocultar-en-movil" style={{ width: '220px', flexShrink: '0' }}>
                   <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '20px', margin: '0 0 5px 0', color: '#000' }}><span style={{fontSize: '24px'}}>⧼</span> Filtros</h3>
-                  <div style={{ borderTop: '1px solid #ddd', paddingTop: '15px', marginTop: '20px' }}>
+                                    <div style={{ borderTop: '1px solid #ddd', paddingTop: '15px', marginTop: '20px' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', color: '#333' }}>Categoría <span>⌄</span></div>
                     <div style={{ color: '#555', fontSize: '14px', lineHeight: '2.5' }}>
                       {departamentos.map(dep => (
